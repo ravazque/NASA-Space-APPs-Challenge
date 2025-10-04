@@ -1,5 +1,5 @@
 
-CC       := gcc
+CC       := cc
 CFLAGS   := -O2 -Wall -Wextra -Werror -Wshadow -std=c17
 DFLAGS   := -O0 -g3 -fsanitize=address,undefined -fno-omit-frame-pointer
 INCLUDE  := -Iinclude

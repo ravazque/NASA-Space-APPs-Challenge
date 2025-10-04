@@ -124,7 +124,7 @@ make
 
 ---
 
-## Por qué es defendible
+## Defensa durante el Hackathon
 
 * Mantiene la **corrección temporal** del CGR, imprescindible en LEO.
 * Añade **dos heurísticas** simples pero efectivas que reducen la **miopía** del modelo estático con un **coste despreciable**.
@@ -134,5 +134,5 @@ make
 
 ## Créditos
 
-Desarrollado para EcoStation Europa — módulo de planificación y exploración de rutas CGR sobre datos públicos. Este README explica **arquitectura, flujo y ventajas** sin entrar en detalles de implementación línea a línea.
+Desarrollado para EcoStation Europa — módulo de planificación y exploración de rutas CGR sobre datos públicos.
 
