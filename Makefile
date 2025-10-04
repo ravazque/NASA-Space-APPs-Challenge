@@ -37,13 +37,16 @@
 #   make            -> compila
 #   make run        -> ejecuta un ejemplo sobre data/contacts.csv (k=3)
 #   make debug      -> compila con símbolos de depuración
-#   make clean      -> limpia binarios y objetos
+#   make clean      -> limpia objetos (.o)
+#   make fclean     -> limpia todo (objetos + ejecutable)
+#   make re         -> recompila desde cero (fclean + all)
 #
 # Estructura:
-#   include/ : headers (APIs y structs)
-#   src/     : implementación (heap, csv, cgr, main)
-#   data/    : CSV de contactos de ejemplo
-#   tests/   : script de prueba
+#   include/    : headers (APIs y structs)
+#   src/        : implementación (heap, csv, cgr, main)
+#   objetsLeo/  : archivos objeto (.o)
+#   data/       : CSV de contactos de ejemplo
+#   tests/      : script de prueba
 # ─────────────────────────────────────────────────────────────────────────────
 
 CC       := gcc
@@ -51,45 +54,72 @@ CFLAGS   := -O2 -Wall -Wextra -Wshadow -std=c17
 DFLAGS   := -O0 -g3 -fsanitize=address,undefined -fno-omit-frame-pointer
 INCLUDE  := -Iinclude
 
-SRC      := src/heap.c src/csv.c src/cgr.c src/main.c
-OBJ      := $(SRC:.c=.o)
+# ─── Directorios ──────────────────────────────────────────────────────────────
+SRC_DIR  := src
+OBJ_DIR  := objetsLeo
+
+# ─── Detección automática de archivos fuente ─────────────────────────────────
+SRC      := $(wildcard $(SRC_DIR)/*.c)
+OBJ      := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRC))
 BIN      := cgr
 
+# ─── Colores para output ──────────────────────────────────────────────────────
 GREEN    := \033[32m
 YELLOW   := \033[33m
 BLUE     := \033[34m
+RED      := \033[31m
 RESET    := \033[0m
 
-.PHONY: all clean run debug help
+.PHONY: all clean fclean re run debug help
 
+# ─── Target principal ─────────────────────────────────────────────────────────
 all: $(BIN)
-	@echo "$(GREEN)✓ Build completo:$(RESET) ./$(BIN)"
+	@echo -e "$(GREEN)✓ Build completo:$(RESET) ./$(BIN)"
 
 $(BIN): $(OBJ)
-	@echo "$(BLUE)→ Linkeando$(RESET) $@"
+	@echo -e "$(BLUE)→ Linkeando$(RESET) $@"
 	$(CC) $(CFLAGS) $(OBJ) -o $@
 
-%.o: %.c include/*.h
-	@echo "$(BLUE)→ Compilando$(RESET) $<"
+# ─── Compilación de objetos (con creación automática del directorio) ─────────
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
+	@echo -e "$(BLUE)→ Compilando$(RESET) $< → $@"
 	$(CC) $(CFLAGS) $(INCLUDE) -c $< -o $@
 
+# ─── Creación del directorio de objetos ──────────────────────────────────────
+$(OBJ_DIR):
+	@echo -e "$(YELLOW)→ Creando directorio$(RESET) $(OBJ_DIR)/"
+	@mkdir -p $(OBJ_DIR)
+
+# ─── Ejecución de prueba ──────────────────────────────────────────────────────
 run: all
-	@echo "$(YELLOW)Ejecutando demo (k=3) sobre data/contacts.csv$(RESET)"
+	@echo -e "$(YELLOW)Ejecutando demo (k=3) sobre data/contacts.csv$(RESET)"
 	./$(BIN) --contacts data/contacts.csv --src 100 --dst 200 --t0 0 --bytes 5e7 --k 3
 
+# ─── Build con debug ──────────────────────────────────────────────────────────
 debug: CFLAGS := $(DFLAGS)
-debug: clean $(BIN)
-	@echo "$(GREEN)✓ Build debug listo$(RESET)"
-	@echo "$(YELLOW)Sugerencia: ejecuta con ASan/UBSan en tu entorno$(RESET)"
+debug: fclean $(BIN)
+	@echo -e "$(GREEN)✓ Build debug listo$(RESET)"
+	@echo -e "$(YELLOW)Sugerencia: ejecuta con ASan/UBSan en tu entorno$(RESET)"
 
+# ─── Limpieza ─────────────────────────────────────────────────────────────────
 clean:
-	@echo "$(BLUE)→ Limpiando$(RESET)"
-	rm -f $(OBJ) $(BIN)
+	@echo -e "$(RED)→ Limpiando objetos$(RESET)"
+	@rm -rf $(OBJ_DIR)
 
+fclean: clean
+	@echo -e "$(RED)→ Limpiando ejecutable$(RESET)"
+	@rm -f $(BIN)
+
+re: fclean all
+
+# ─── Ayuda ────────────────────────────────────────────────────────────────────
 help:
-	@echo "Targets:"
-	@echo "  make        -> compila"
-	@echo "  make run    -> ejecuta ejemplo con k=3"
-	@echo "  make debug  -> compila con símbolos y sanitizers"
-	@echo "  make clean  -> borra binarios/objetos"
+	@echo -e "$(BLUE)Targets disponibles:$(RESET)"
+	@echo -e "  $(GREEN)make$(RESET)        -> compila el proyecto"
+	@echo -e "  $(GREEN)make run$(RESET)    -> ejecuta ejemplo con k=3"
+	@echo -e "  $(GREEN)make debug$(RESET)  -> compila con símbolos y sanitizers"
+	@echo -e "  $(GREEN)make clean$(RESET)  -> elimina directorio objetsLeo/"
+	@echo -e "  $(GREEN)make fclean$(RESET) -> elimina objetos y ejecutable"
+	@echo -e "  $(GREEN)make re$(RESET)     -> recompila desde cero (fclean + all)"
+	@echo -e "  $(GREEN)make help$(RESET)   -> muestra esta ayuda"
 
