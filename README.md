@@ -1,204 +1,185 @@
 
-# Microproyectos EcoStation Europa - Prototipos 24h
+# Comunicación entre satélites (Inter‑Satellite Links, ISL)
 
-## 📋 ROLES Y RESPONSABILIDADES
-
-### **👨‍🎓 Persona 1: "Materials Expert"** (Universidad - Materiales)
-- **Rol principal**: Cálculos, validaciones técnicas, modelos físicos
-- **Herramientas**: Excel/Python básico, calculadoras online, papers
-- **Output**: Especificaciones técnicas, validación de feasibility
-
-### **🔥 Persona 2: "Core Developer"** (42 - Experto C)
-- **Rol principal**: Arquitectura backend, algoritmos críticos, integración
-- **Herramientas**: C, bash, Git, makefile
-- **Output**: Motores de cálculo, APIs, simuladores core
-
-### **⚡ Persona 3 & 4: "Full-Stack Duo"** (42 - C + HTML + AI tools)
-- **Rol principal**: Frontend, visualización, deploy, documentación
-- **Herramientas**: HTML/CSS/JS, GitHub Pages, AI assistants, bash
-- **Output**: Interfaces, dashboards, demos visuales, presentación
+> Estado del arte práctico para equipos que quieran diseñar, integrar o evaluar enlaces inter‑satélite.
 
 ---
 
-## 🚀 MICROPROYECTO 1: "Orbital Debris Calculator"
-**Tiempo estimado**: 6-8 horas | **Impacto**: Alto | **Complejidad**: Media
+## 1) Qué es y para qué sirve
 
-### Concepto
-Calculadora que estima cuánto material reciclable hay disponible en una órbita específica y cuánto podría procesar EcoStation Europa.
+Las ISL permiten que dos satélites se comuniquen directamente sin pasar por estaciones en tierra. Al crear mallas en órbita (especialmente en LEO):
 
-### Implementación por Roles
+* Reducen latencia extremo‑a‑extremo.
+* Mantienen conectividad en zonas sin gateways (océanos, polos).
+* Descongestionan espectro y tramas en el segmento terreno.
+* Permiten “store‑and‑forward” y routing espacial sin dependencia constante del suelo.
 
-#### **Materials Expert**
-- Investigar datos reales de debris en LEO (NASA ODPO, ESA Space Debris Office)
-- Calcular densidades de material por altitud
-- Definir parámetros de reciclabilidad (aluminio, acero, composites)
-- Crear modelo matemático: `Material_Reciclable = f(altitud, tiempo, tecnología_captura)`
-
-#### **Core Developer**
-- Implementar algoritmos de cálculo en C
-- Crear API simple que reciba: altitud, tiempo_operacion, radio_captura
-- Devolver: toneladas_disponibles, valor_economico, tiempo_procesamiento
-- Makefile para compilación fácil
-
-#### **Full-Stack Duo**
-- **Persona 3**: Frontend HTML con inputs (altitud, parámetros operación)
-- **Persona 4**: Integración con backend C (via CGI o scripts bash)
-- Visualización: gráficos de debris disponible vs. tiempo
-- Deploy en GitHub Pages con calculadora funcional
-
-### **Entregable**: Website con calculadora orbital funcional + documentación técnica
+**Casos de uso**: mega‑constelaciones (backbone LEO‑LEO), relés de datos LEO→GEO (downlink casi en tiempo real), operaciones lunares/planetarias con tolerancia a interrupciones.
 
 ---
 
-## 🔬 MICROPROYECTO 2: "Microgravity Profit Simulator"
-**Tiempo estimado**: 4-6 horas | **Impacto**: Alto | **Complejidad**: Baja
+## 2) Tecnologías principales
 
-### Concepto
-Simulador que muestra qué tipos de experimentos/manufactura son más rentables en microgravedad vs. Tierra.
+### RF (microondas)
 
-### Implementación por Roles
+* **Pros**: tecnología madura; interoperabilidad sólida; apuntado menos exigente; buen desempeño en escenarios dinámicos.
+* **Contras**: menor caudal por Hz; uso de espectro licenciado/coord. ITU; antenas y RF chains más voluminosos.
+* **Dónde encaja**: proximidad, misiones con jitter/plataformas modestas, redundancia a óptica.
 
-#### **Materials Expert**
-- Research de procesos que mejoran en microgravedad (cristales proteína, aleaciones, fibra óptica)
-- Calcular diferencias de calidad/rendimiento Tierra vs. Espacio
-- Estimar costos de transporte vs. valor añadido por calidad
+### Óptica (láser)
 
-#### **Core Developer**
-- Crear motor de cálculo de ROI: `ROI = (Valor_Producto_Espacial - Costos_Orbitales) / Inversion`
-- Implementar diferentes escenarios de productos
-- Base de datos simple en archivos (CSV/JSON)
+* **Pros**: muy alto caudal (decenas‑cientos Gbps); inmunidad a interferencias RF; sin licencia de espectro entre satélites; terminales compactos.
+* **Contras**: requiere **PAT** (Pointing, Acquisition and Tracking) muy fino; control térmico/estructural y sincronización estrictos; sensibilidad a desalineación y contaminación óptica.
+* **Dónde encaja**: mallas LEO‑LEO de alto rendimiento, relés EDRS‑like, backbone de transporte.
 
-#### **Full-Stack Duo**
-- **Persona 3**: Interface para seleccionar tipo producto, cantidad, tiempo
-- **Persona 4**: Dashboard con comparativas Tierra vs. Espacio
-- Gráficos de rentabilidad por industria (pharma, materials, semiconductors)
-
-### **Entregable**: Simulador web que muestre que productos son más rentables fabricar en órbita
+> **Híbrido**: RF para adquisición/backup + óptica para datos masivos.
 
 ---
 
-## 🌍 MICROPROYECTO 3: "European Space Funding Tracker"
-**Tiempo estimado**: 4-6 horas | **Impacto**: Medio | **Complejidad**: Baja
+## 3) Estándares y pila de protocolos
 
-### Concepto
-Dashboard que trackea oportunidades de financiación europea para proyectos espaciales comerciales.
+### Capas física/enlace (CCSDS)
 
-### Implementación por Roles
+* **Proximity‑1**: enlaces de cercanía (orbiter‑orbiter / orbiter‑rover).
+* **USLP (Unified Space Data Link Protocol)**: evolución de alto rendimiento para espacio‑espacio y espacio‑tierra.
+* **Óptica CCSDS (HDR 1064/1550 nm)**: define adquisición, apuntado, codificación y sincronización para terminales láser.
 
-#### **Materials Expert**
-- Investigar programas actuales: ESA Commercial Space, Horizon Europe, fondos nacionales
-- Crear base de datos de: programa, deadline, funding amount, requirements
-- Mapear qué tipo de proyectos encajan con EcoStation
+### Perfiles de interoperabilidad
 
-#### **Core Developer**
-- Scraper básico en C/bash para websites públicos de funding
-- Sistema de alertas por deadline/matching criteria
-- Parser de PDFs con convocatorias (usando herramientas CLI)
+* **SDA OCT/OISL** (Space Development Agency, EE. UU.): perfiles abiertos de terminales ópticos para interoperar entre proveedores (interfaces, FEC, PAT, seguridad, telemetría).
 
-#### **Full-Stack Duo**
-- **Persona 3**: Dashboard con timeline de convocatorias
-- **Persona 4**: Sistema de filtros por tipo proyecto, cantidad, deadline
-- Notificaciones visuales de oportunidades relevantes
+### Red/Transporte tolerante a interrupciones
 
-### **Entregable**: Dashboard de financiación europea actualizable automáticamente
+* **DTN / Bundle Protocol v7 (BPv7)** con **BPSec** (seguridad E2E), **LTP** para transporte espacial y **Contact Graph Routing (CGR)** para ruteo por contactos conocidos.
+* Implementaciones: **ION (JPL/NASA)**, **HDTN (NASA Glenn)**.
 
----
-
-## ⚡ MICROPROYECTO BONUS: "Space Station Power Optimizer"
-**Tiempo estimado**: 3-4 horas | **Complejidad**: Media
-
-### Concepto
-Optimizador que calcula la configuración óptima de paneles solares considerando órbita, sombra terrestre, y demanda energética.
-
-#### **Materials Expert**: Parámetros solares, eficiencia por altitud
-#### **Core Developer**: Algoritmo de optimización, cálculos orbitales
-#### **Full-Stack Duo**: Visualización 3D básica de órbita + paneles
+```
+Capa App     : Telemetría/Telecomandos, cargas útiles, files
+Capa Red     : DTN (BPv7 + BPSec)  | IPv6 opcional intra‑satélite
+Capa Enlace  : USLP / Proximity‑1 / Óptica CCSDS (tramas, FEC)
+Capa Física  : RF (S/X/Ka, etc.) o Láser (1064/1550 nm)
+```
 
 ---
 
-## 📅 TIMELINE DE 24 HORAS
+## 4) Actores, programas y hardware
 
-### **Horas 0-2: Setup & Planning**
-- Git repo común, estructura de carpetas
-- División definitiva de tareas por proyecto
-- Setup del entorno de desarrollo común
-
-### **Horas 2-8: Desarrollo Core**
-- Materials Expert: Research + cálculos base
-- Core Developer: Backend del proyecto principal
-- Full-Stack: Estructura frontend + integración básica
-
-### **Horas 8-16: Integración & Testing**
-- Unir backend con frontend
-- Testing básico de funcionalidades
-- Deploy de versiones alpha
-
-### **Horas 16-20: Polish & Documentation**
-- Bug fixes, mejoras de UX
-- Documentación técnica
-- Preparación demo
-
-### **Horas 20-24: Presentación**
-- Slides de presentación
-- Demo script
-- Video/screenshots de productos
+* **Mega‑constelaciones**: Starlink (ISL ópticos ~100–200 Gbps); Kuiper/OneWeb en evolución hacia ISL.
+* **Relés GEO**: **EDRS (SpaceDataHighway)** de Airbus/ESA para LEO↔GEO vía láser.
+* **Demostradores NASA/ESA**: LCRD/LCOT/TBIRD (downlinks ópticos récord y madurez PAT), misiones Proba‑V/EDRS.
+* **Vendors de terminales ópticos**: Mynaric (CONDOR Mk2/Mk3), CACI, Tesat, etc.
 
 ---
 
-## 🛠️ STACK TECNOLÓGICO
+## 5) Retos técnicos críticos
 
-### **Backend**
-- **C** para cálculos intensivos
-- **Bash** para scripting, automation
-- **JSON/CSV** para datos
-- **CGI** para web integration (simple)
-
-### **Frontend**
-- **HTML5 + CSS3** puro (sin frameworks)
-- **JavaScript** vanilla para interactividad
-- **Chart.js** para gráficos (via CDN)
-- **GitHub Pages** para hosting
-
-### **Tools & Workflow**
-- **Git** para colaboración
-- **Makefile** para builds
-- **AI assistants** para acelerar desarrollo
-- **curl/wget** para data scraping
+1. **PAT (Pointing, Acquisition & Tracking)**: haces muy estrechos ⇒ búsqueda temporal/espacial coordinada; requisitos de jitter, estabilidad térmica y modelado de error de apuntamiento.
+2. **Dinámica LEO‑LEO**: altas velocidades relativas ⇒ **Doppler**, ventanas de visibilidad cortas y topologías cambiantes ⇒ demanda **CGR** y planificación de contactos.
+3. **Rendimiento extremo**: tasas 100–200 Gbps ⇒ **FEC** (LDPC), control de jitter/latencia, buffers para “store‑and‑forward”.
+4. **Entorno espacial**: ciclos térmicos, radiación, contaminación de ópticas, outgassing.
+5. **Interoperabilidad multi‑proveedor**: perfilar contra **SDA OCT**/CCSDS para enlaces mixtos.
+6. **Seguridad y resiliencia**: cifrado en enlace y **BPSec** E2E; hardening de OBC/red; anti‑jamming (en RF).
+7. **Regulación/espectro**: RF requiere coordinación ITU; en óptica considerar seguridad ocular, coexistencia con otros instrumentos y normas de exportación.
 
 ---
 
-## 🎯 CRITERIOS DE ÉXITO
+## 6) Arquitecturas típicas
 
-### **Técnico**
-- [ ] Al menos 2 proyectos 100% funcionales
-- [ ] Demos deployadas y accesibles online
-- [ ] Código documentado y en Git
-- [ ] Cálculos validados por materials expert
+### Malla LEO‑LEO con ISL ópticos
 
-### **Presentación**
-- [ ] Demo de 3-5 minutos por proyecto
-- [ ] Explicación clara de valor comercial
-- [ ] Roadmap de escalabilidad post-hackathon
-- [ ] Conexión evidente con EcoStation Europa
+* 2‑4 enlaces por satélite (in‑plane y cross‑plane) ⇒ backbone en órbita, mínima dependencia de gateways.
 
-### **Impacto**
-- [ ] Herramientas que otros equipos quieran usar
-- [ ] Conceptos replicables/escalables
-- [ ] Potencial de spin-off real
-- [ ] Validación de feasibility de EcoStation
+### LEO↔GEO (relay láser)
+
+* LEO sube datos a un GEO “data relay” y éste hace downlink a múltiples estaciones (casi tiempo real y mejor cobertura).
+
+### Esquema (Mermaid)
+
+```mermaid
+flowchart LR
+  subgraph Plano_1[Plano orbital A]
+    A1[Sat A1]
+    A2[Sat A2]
+  end
+  subgraph Plano_2[Plano orbital B]
+    B1[Sat B1]
+    B2[Sat B2]
+  end
+  A1 --- A2
+  B1 --- B2
+  A1 === B1
+  A2 === B2
+  subgraph GEO[GEO Relay]
+    G1[Sat GEO]
+  end
+  A2 ==> G1
+  G1 ==> Ground[Estación terrestre]
+```
 
 ---
 
-## 🚀 ESTRATEGIA DE PITCH
+## 7) Stack de trabajo recomendado (práctico)
 
-### **Opener** (30 segundos)
-"Hemos creado las herramientas que necesita cualquier empresa para validar si su negocio espacial es viable ANTES de invertir millones"
+**Normativa/base técnica**
 
-### **Demo** (3 minutos)
-- Mostrar calculadora de debris: "Aquí pueden ver cuánto material tienen disponible"
-- Mostrar simulador rentabilidad: "Y aquí si vale la pena procesarlo"
-- Mostrar tracker funding: "Y aquí cómo financiarlo"
+* USLP/Proximity‑1 para enlace; Óptica CCSDS HDR para láser; perfilar contra SDA OCT si se requiere interoperabilidad.
 
-### **Vision** (1 minuto)
-"Estos no son solo prototipos - son los primeros módulos de EcoStation Europa, la primera estación comercial sostenible europea"
+**Red y software**
 
+* DTN (BPv7 + BPSec); CGR para planificación; ION/HDTN en el OBC; TM/TC bajo CCSDS.
+
+**Simulación y pruebas**
+
+* Planificación de contactos; emulación de Doppler/fading; bancadas con generadores de tramas CCSDS (p. ej., YAMCS) y terminales de laboratorio.
+
+**Hardware de referencia**
+
+* Terminales ópticos COTS (Mynaric CONDOR, Tesat, etc.) con PAT integrado; radios SDR para RF (S/X/Ka) con modems compatibles USLP.
+
+---
+
+## 8) Roadmap de implantación (paso a paso)
+
+1. **Requisitos**: órbita, geometría, caudal/latencia, SNR y presupuesto de enlace.
+2. **Elección tecnológica**: RF vs. óptica (o híbrido) según pointing/potencia/presupuesto.
+3. **Estándares**: USLP/Proximity‑1 + Óptica CCSDS; alinear con SDA OCT si aplica.
+4. **Red tolerante a interrupciones**: BPv7 + BPSec; CGR; telemetría/telecomandos integrados.
+5. **PAT y térmico**: cierres de presupuesto fotónico, jitter de plataforma, secuencias de adquisición.
+6. **Banco de pruebas**: FEC, latencias, resiliencia (degradados, pérdida de contacto); campañas HIL/SIL.
+7. **Validación on‑orbit**: pilotos con terminales COTS; monitorizar KPIs (BER, throughput, availability, contact success rate).
+
+---
+
+## 9) Checklist de requisitos (copiable)
+
+* [ ] **Órbita y geometría** definidas (LEO/MEO/GEO, planos y cruces).
+* [ ] **Tecnología de enlace**: RF / Óptica / Híbrida.
+* [ ] **Estándares**: USLP / Proximity‑1 / Óptica CCSDS; perfil **SDA OCT** si aplica.
+* [ ] **Capa de red**: DTN (BPv7 + BPSec), CGR configurado.
+* [ ] **Terminal**: presupuesto de potencia, PAT (adquisición, tracking), FEC (LDPC), reloj/PLL.
+* [ ] **OBC/Software**: ION/HDTN, TM/TC, logging, actualización segura.
+* [ ] **Seguridad**: cifrado en enlace y E2E; hardening; supply‑chain y secure boot.
+* [ ] **Regulación**: coordinación ITU (RF), requisitos de seguridad óptica y export control.
+* [ ] **Pruebas**: HIL/SIL, enlace cierre a temperatura, vibración, radiación; KPIs definidos.
+* [ ] **Operaciones**: planificación de contactos, mantenimiento, telemetría de salud del enlace.
+
+---
+
+## 10) Lecturas y referencias sugeridas (para ampliar)
+
+* Documentación CCSDS (USLP, Proximity‑1, Optical Communications).
+* RFC 9171 (Bundle Protocol v7), BPSec.
+* Publicaciones de NASA/ESA sobre LCRD, LCOT, TBIRD y EDRS.
+* Especificaciones públicas de SDA OCT/OISL.
+* Data‑sheets de terminales ópticos (Mynaric, Tesat, CACI).
+
+---
+
+## 11) Glosario mínimo
+
+* **ISL**: Inter‑Satellite Link.
+* **PAT**: Pointing, Acquisition & Tracking.
+* **DTN / BPv7**: Red tolerante a retardos/ interrupciones; Bundle Protocol v7.
+* **USLP**: Unified Space Data Link Protocol (CCSDS).
+* **CGR**: Contact Graph Routing (ruteo por ventanas de visibilidad conocidas).
+* **FEC/LDPC**: Corrección de errores (Forward Error Correction / Low‑Density Parity‑Check).
