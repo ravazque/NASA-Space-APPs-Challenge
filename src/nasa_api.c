@@ -1,144 +1,97 @@
-// src/nasa_api.c — Implementación de integración con NASA APIs
+// src/nasa_api.c — integración SODA (CSV) para data.nasa.gov
+#define _POSIX_C_SOURCE 200809L
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
-#include <time.h>
-#include <unistd.h>
+#include <errno.h>
+#include <unistd.h>   // getpid()
+#include <curl/curl.h>
+
 #include "nasa_api.h"
+#include "csv.h"
+#include "cgr.h"
 
-char	*ft_strdup(const char *s1)
-{
-	size_t	len;
-	char	*dup_str;
-	size_t	i;
+typedef struct {
+    FILE *fp;
+} CurlFileSink;
 
-	len = 0;
-	while (s1[len] != '\0')
-	{
-		len++;
-	}
-	dup_str = (char *)malloc(len + 1);
-	if (!dup_str)
-	{
-		return (NULL);
-	}
-	i = 0;
-	while (i <= len)
-	{
-		dup_str[i] = s1[i];
-		i++;
-	}
-	return (dup_str);
+static size_t curl_write_to_file(void *ptr, size_t size, size_t nmemb, void *userdata){
+    CurlFileSink *s = (CurlFileSink*)userdata;
+    return fwrite(ptr, size, nmemb, s->fp) * size;
 }
 
-// Inicializar configuración
-NasaApiConfig* nasa_api_init(const char *api_key, const char *dataset_id) {
-    NasaApiConfig *cfg = (NasaApiConfig*)calloc(1, sizeof(NasaApiConfig));
-    if (!cfg) return NULL;
-    
-    if (api_key) {
-        cfg->api_key = ft_strdup(api_key);
-    }
-    
-    if (dataset_id) {
-        cfg->dataset_id = ft_strdup(dataset_id);
-    }
-    
-    cfg->update_interval_s = 5; // Default: 5 minutos
-    cfg->cache_file = ft_strdup("data/contacts_cache.csv");
-    
-    return cfg;
-}
-
-// Liberar configuración
-void nasa_api_free(NasaApiConfig *cfg) {
-    if (!cfg) return;
-    
-    free(cfg->api_key);
-    free(cfg->soda_app_token);
-    free(cfg->dataset_id);
-    free(cfg->cache_file);
-    free(cfg);
-}
-
-// Fetch real desde API SODA (usando curl)
-int nasa_api_fetch_contacts(const NasaApiConfig *cfg, Contact **out_contacts) {
-    if (!cfg || !cfg->dataset_id) return -1;
-    
-    // Construir comando curl
-    char cmd[2048];
-    snprintf(cmd, sizeof(cmd),
-        "curl -s -G 'https://data.nasa.gov/resource/%s.json' "
-        "--data-urlencode '$select=id,from,to,t_start,t_end,owlt_s,rate_bps,setup_s,residual_bytes' "
-        "--data-urlencode '$limit=10000' "
-        "%s%s "
-        "-o /tmp/nasa_contacts.json",
-        cfg->dataset_id,
-        cfg->soda_app_token ? "-H 'X-App-Token: " : "",
-        cfg->soda_app_token ? cfg->soda_app_token : ""
+static int build_soda_url(char *dst, size_t cap, const NasaApiConfig *cfg){
+    if(!cfg || !cfg->dataset_id) return -1;
+    int limit = cfg->sod_limit > 0 ? cfg->sod_limit : 50000;
+    return snprintf(
+        dst, cap,
+        "https://data.nasa.gov/resource/%s.csv"
+        "?$select=id,from,to,t_start,t_end,owlt,rate_bps,setup_s,residual_bytes"
+        "&$limit=%d",
+        cfg->dataset_id, limit
     );
-    
-    // Ejecutar curl
-    int ret = system(cmd);
-    if (ret != 0) {
-        fprintf(stderr, "Error: curl failed (ret=%d)\n", ret);
-        return -1;
-    }
-    
-    // TODO: Parsear JSON y convertir a Contact[]
-    // Por ahora, usar caché CSV como fallback
-    fprintf(stderr, "WARNING: JSON parsing not implemented, using CSV cache\n");
-    
-    return 0;
 }
 
-// Actualizar si es necesario
-int nasa_api_update_if_needed(const NasaApiConfig *cfg, UpdateState *state,
-                               Contact **out_contacts, int *out_count) {
-    if (!cfg || !state) return -1;
-    
-    time_t now = time(NULL);
-    
-    // ¿Necesitamos actualizar?
-    if (state->last_update == 0 || 
-        (now - state->last_update) >= cfg->update_interval_s) {
-        
-        fprintf(stderr, "[NASA API] Actualizando contactos desde API...\n");
-        
-        int n = nasa_api_fetch_contacts(cfg, out_contacts);
-        
-        if (n < 0) {
-            state->error_count++;
-            snprintf(state->last_error, sizeof(state->last_error),
-                     "Failed to fetch from API");
-            
-            // Fallback a caché
-            fprintf(stderr, "[NASA API] Usando caché: %s\n", cfg->cache_file);
-            // Cargar desde caché
-            return 0;
-        }
-        
-        state->last_update = now;
-        state->contact_count = n;
-        state->update_counter++;
-        
-        fprintf(stderr, "[NASA API] ✓ Actualizado: %d contactos\n", n);
-        return 1; // Actualizado
+int nasa_api_fetch_contacts(const NasaApiConfig *cfg, Contact **out_contacts) {
+    if(!cfg || !cfg->dataset_id || !out_contacts) return -1;
+    *out_contacts = NULL;
+
+    char url[1024];
+    if(build_soda_url(url, sizeof(url), cfg) <= 0) return -1;
+
+    char tmp_path[256];
+    snprintf(tmp_path, sizeof(tmp_path), "/tmp/nasa_contacts_%ld.csv", (long)getpid());
+
+    CURL *curl = curl_easy_init();
+    if(!curl) return -1;
+
+    FILE *fp = fopen(tmp_path, "wb");
+    if(!fp){ curl_easy_cleanup(curl); return -1; }
+
+    CurlFileSink sink = {.fp = fp};
+
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_to_file);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &sink);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "EcoStation-CGR/1.0");
+
+    struct curl_slist *headers = NULL;
+    if(cfg->app_token && cfg->app_token[0]){
+        char h[256];
+        snprintf(h, sizeof(h), "X-App-Token: %s", cfg->app_token);
+        headers = curl_slist_append(headers, h);
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     }
-    
-    // Usar datos existentes
-    return 0;
+
+    CURLcode rc = curl_easy_perform(curl);
+    fclose(fp);
+
+    long http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+
+    if(headers) curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    if(rc != CURLE_OK || http_code < 200 || http_code >= 300){
+        remove(tmp_path);
+        return 0; // no fatal: el caller puede hacer fallback al CSV local
+    }
+
+    Contact *C = NULL;
+    int N = load_contacts_csv(tmp_path, &C);
+    remove(tmp_path);
+
+    if(N <= 0){
+        return 0; // sin datos útiles; usa fallback
+    }
+
+    *out_contacts = C;
+    return N;
 }
 
-// Calcular contactos desde TLEs (placeholder para futuro)
-int calculate_contacts_from_tles(const char *tle_file, double t_start, double t_end,
-                                  Contact **out_contacts) {
-    (void)tle_file;
-    (void)t_start;
-    (void)t_end;
-    (void)out_contacts;
-    
-    // TODO: Implementar con libsgp4
-    fprintf(stderr, "calculate_contacts_from_tles: NOT IMPLEMENTED\n");
-    return -1;
+int nasa_api_update_if_needed(const NasaApiConfig *cfg, double sim_time,
+                              Contact **out_contacts, int *out_count) {
+    (void)cfg; (void)sim_time; (void)out_contacts; (void)out_count;
+    return 0; // sin refresco dinámico aún
 }
