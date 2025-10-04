@@ -1,261 +1,444 @@
-
 // src/cgr.c — CGR: Dijkstra temporal (k=1), K por consumo y K Yen-lite (con filtros) — C puro
+// Versión mejorada con robustez y optimizaciones
+
 #include <stdlib.h>
 #include <string.h>
 #include <float.h>
 #include <stdio.h>
+#include <limits.h>
 #include "cgr.h"
 #include "heap.h"
 
-static inline int max3(int a,int b,int c){ int m=a>b?a:b; return m>c?m:c; }
+// ═══════════════════════════════════════════════════════════════════════════
+// Constantes y macros
+// ═══════════════════════════════════════════════════════════════════════════
 
-/*-----------------------------------------------------------------------------
-  Construcción del índice by_from
------------------------------------------------------------------------------*/
-NeighborIndex* build_neighbor_index(const Contact *C, int N){
+#define EPS_TIME  1e-12   // Tolerancia temporal (femtosegundos)
+#define EPS_BYTES 1e-9    // Tolerancia de capacidad (~1 byte)
+
+// Debug opcional (compilar con -DDEBUG_VERBOSE)
+#ifdef DEBUG_VERBOSE
+#define DEBUG_PRINT(...) fprintf(stderr, "[DEBUG CGR] " __VA_ARGS__)
+#else
+#define DEBUG_PRINT(...) ((void)0)
+#endif
+
+static inline int max3(int a, int b, int c) {
+    int m = a > b ? a : b;
+    return m > c ? m : c;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Construcción del índice by_from
+// ═══════════════════════════════════════════════════════════════════════════
+
+NeighborIndex* build_neighbor_index(const Contact *C, int N) {
+    if (!C || N <= 0) return NULL;
+    
+    // Encontrar nodo máximo para dimensionar el array
     int maxNode = 0;
-    for(int i=0;i<N;i++) maxNode = max3(maxNode, C[i].from, C[i].to);
+    for (int i = 0; i < N; i++) {
+        maxNode = max3(maxNode, C[i].from, C[i].to);
+    }
 
     NeighborIndex *ni = (NeighborIndex*)calloc(1, sizeof(NeighborIndex));
+    if (!ni) return NULL;
+    
     ni->node_cap = maxNode + 1;
     ni->by_from = (IndexList*)calloc(ni->node_cap, sizeof(IndexList));
+    if (!ni->by_from) {
+        free(ni);
+        return NULL;
+    }
 
-    for(int i=0;i<N;i++){
+    // Agrupar contactos por nodo origen
+    for (int i = 0; i < N; i++) {
         int from = C[i].from;
-        if(from < 0 || from >= ni->node_cap) continue;
+        if (from < 0 || from >= ni->node_cap) continue;
+        
         IndexList *L = &ni->by_from[from];
-        if(L->count >= L->cap){
-            L->cap = (L->cap==0?4:L->cap*2);
-            L->idxs = (int*)realloc(L->idxs, sizeof(int)*L->cap);
+        if (L->count >= L->cap) {
+            L->cap = (L->cap == 0 ? 8 : L->cap * 2);
+            int *new_idxs = (int*)realloc(L->idxs, sizeof(int) * L->cap);
+            if (!new_idxs) continue; // Skip en caso de fallo de memoria
+            L->idxs = new_idxs;
         }
         L->idxs[L->count++] = i;
     }
+    
+    DEBUG_PRINT("Índice construido: %d nodos, %d contactos\n", ni->node_cap, N);
     return ni;
 }
 
-void free_neighbor_index(NeighborIndex* ni){
-    if(!ni) return;
-    for(int i=0;i<ni->node_cap;i++) free(ni->by_from[i].idxs);
-    free(ni->by_from);
+void free_neighbor_index(NeighborIndex* ni) {
+    if (!ni) return;
+    if (ni->by_from) {
+        for (int i = 0; i < ni->node_cap; i++) {
+            free(ni->by_from[i].idxs);
+        }
+        free(ni->by_from);
+    }
     free(ni);
 }
 
-/*-----------------------------------------------------------------------------
-  Helpers de filtros / prefijo forzado
------------------------------------------------------------------------------*/
-static inline int is_banned_id(int id, const CgrFilters *F){
-    if(!F || !F->banned_ids || F->banned_count<=0) return 0;
-    for(int i=0;i<F->banned_count;i++){
-        if(F->banned_ids[i] == id) return 1;
+// ═══════════════════════════════════════════════════════════════════════════
+// Helpers de filtros / prefijo forzado
+// ═══════════════════════════════════════════════════════════════════════════
+
+static inline int is_banned_id(int id, const CgrFilters *F) {
+    if (!F || !F->banned_ids || F->banned_count <= 0) return 0;
+    
+    for (int i = 0; i < F->banned_count; i++) {
+        if (F->banned_ids[i] == id) return 1;
     }
     return 0;
 }
 
-static inline int forced_id_at(const CgrFilters *F, int k){
-    if(!F || !F->forced_prefix_ids || F->forced_count<=0) return -1;
-    if(k < 0 || k >= F->forced_count) return -1;
+static inline int forced_id_at(const CgrFilters *F, int k) {
+    if (!F || !F->forced_prefix_ids || F->forced_count <= 0) return -1;
+    if (k < 0 || k >= F->forced_count) return -1;
     return F->forced_prefix_ids[k];
 }
 
 /* Dado un contacto índice ci, calcula cuántos elementos del prefijo forzado
-   ya se han satisfecho en la ruta actual (desde la raíz). Para ello reconstruye
-   la ruta (prev_idx) y compara con forced_prefix_ids desde el inicio. */
-static int compute_prefix_done(int ci, const Label *lab, const Contact *C, const CgrFilters *F){
-    if(!F || !F->forced_prefix_ids || F->forced_count<=0) return 0;
+   ya se han satisfecho en la ruta actual (desde la raíz). */
+static int compute_prefix_done(int ci, const Label *lab, const Contact *C, const CgrFilters *F) {
+    if (!F || !F->forced_prefix_ids || F->forced_count <= 0) return 0;
 
-    // Primero contamos longitud de la cadena hasta la raíz
+    // Contar longitud de la cadena hasta la raíz
     int len = 0, walker = ci;
-    while(walker != -1){ len++; walker = lab[walker].prev_idx; }
+    while (walker != -1) {
+        len++;
+        walker = lab[walker].prev_idx;
+        // Protección contra ciclos
+        if (len > 10000) {
+            DEBUG_PRINT("WARNING: Posible ciclo en backtracking\n");
+            break;
+        }
+    }
 
-    // Volcamos los ids de contacto en orden desde raíz -> actual
-    int *seq = (int*)malloc(sizeof(int)*len);
-    int idx = len - 1; walker = ci;
-    while(walker != -1){
+    if (len == 0) return 0;
+
+    // Volcamos los ids de contacto en orden desde raíz → actual
+    int *seq = (int*)malloc(sizeof(int) * len);
+    if (!seq) return 0;
+    
+    int idx = len - 1;
+    walker = ci;
+    while (walker != -1 && idx >= 0) {
         seq[idx--] = C[walker].id;
         walker = lab[walker].prev_idx;
     }
 
     // Comparamos con el prefijo forzado desde el inicio
     int matched = 0;
-    while(matched < F->forced_count && matched < len){
-        if(seq[matched] != F->forced_prefix_ids[matched]) break;
+    while (matched < F->forced_count && matched < len) {
+        if (seq[matched] != F->forced_prefix_ids[matched]) break;
         matched++;
     }
+    
     free(seq);
     return matched;
 }
 
-/*-----------------------------------------------------------------------------
-  Capacidad por ventana y ETA de contacto
------------------------------------------------------------------------------*/
-static double available_bytes_window(const Contact *c, double t_in){
-    if(t_in > c->t_end) return 0.0;
+// ═══════════════════════════════════════════════════════════════════════════
+// Cálculos de capacidad y ETA
+// ═══════════════════════════════════════════════════════════════════════════
+
+static double available_bytes_window(const Contact *c, double t_in) {
+    if (t_in > c->t_end + EPS_TIME) return 0.0;
+    
     double start_tx = (t_in < c->t_start) ? c->t_start : t_in;
     double window = c->t_end - start_tx - c->setup_s;
-    if(window <= 1e-12) return 0.0;
+    if (window <= EPS_TIME) return 0.0;
+    
     double rate = (c->rate_bps > 1.0) ? c->rate_bps : 1.0;
     return window * rate;
 }
 
+// ✅ MEJORA: Pre-check rápido de viabilidad sin calcular ETA completo
+static inline int contact_is_viable(const Contact *c, double t_arrival, double bundle_bytes) {
+    // Check temporal básico
+    if (t_arrival > c->t_end + EPS_TIME) return 0;
+    
+    double start_tx = (t_arrival < c->t_start) ? c->t_start : t_arrival;
+    double window = c->t_end - start_tx - c->setup_s;
+    if (window <= EPS_TIME) return 0;
+    
+    // Check de capacidad
+    double rate = (c->rate_bps > 1.0) ? c->rate_bps : 1.0;
+    double cap_window = window * rate;
+    double cap_actual = (c->residual_bytes < cap_window) ? c->residual_bytes : cap_window;
+    
+    if (cap_actual + EPS_BYTES < bundle_bytes) return 0;
+    
+    // Check que la transmisión cabe en la ventana
+    double tx_time = bundle_bytes / rate;
+    double finish = start_tx + c->setup_s + tx_time;
+    if (finish > c->t_end + EPS_TIME) return 0;
+    
+    return 1;
+}
+
 // ETA al final del contacto, dado t_in (tiempo de llegada al nodo de entrada del contacto)
-static double eta_contact(const Contact *c, double t_in, double bundle_bytes, double expiry_abs){
-    if(t_in > c->t_end) return DBL_MAX;
+static double eta_contact(const Contact *c, double t_in, double bundle_bytes, double expiry_abs) {
+    if (t_in > c->t_end + EPS_TIME) return DBL_MAX;
+    
     double avail = available_bytes_window(c, t_in);
     double cap = (c->residual_bytes < avail) ? c->residual_bytes : avail;
-    if(cap + 1e-9 < bundle_bytes) return DBL_MAX;
+    
+    if (cap + EPS_BYTES < bundle_bytes) return DBL_MAX;
 
     double start_tx = (t_in < c->t_start) ? c->t_start : t_in;
     double rate = (c->rate_bps > 1.0) ? c->rate_bps : 1.0;
     double tx_time = bundle_bytes / rate;
     double finish = start_tx + c->setup_s + tx_time;
-    if(finish > c->t_end + 1e-12) return DBL_MAX;
+    
+    if (finish > c->t_end + EPS_TIME) return DBL_MAX;
 
     double eta = finish + c->owlt;
-    if(expiry_abs > 0.0 && eta > expiry_abs) return DBL_MAX;
+    
+    // Check de expiración
+    if (expiry_abs > 0.0 && eta > expiry_abs + EPS_TIME) return DBL_MAX;
+    
     return eta;
 }
 
-/*-----------------------------------------------------------------------------
-  Búsqueda k=1 (sin filtros) = envoltorio
------------------------------------------------------------------------------*/
-Route cgr_best_route(const Contact *C, int N, const CgrParams *P, const NeighborIndex *NI){
+// ═══════════════════════════════════════════════════════════════════════════
+// Búsqueda k=1 (wrapper sin filtros)
+// ═══════════════════════════════════════════════════════════════════════════
+
+Route cgr_best_route(const Contact *C, int N, const CgrParams *P, const NeighborIndex *NI) {
     return cgr_best_route_filtered(C, N, P, NI, NULL);
 }
 
-/*-----------------------------------------------------------------------------
-  Búsqueda k=1 con filtros (banned + forced prefix)
------------------------------------------------------------------------------*/
+// ═══════════════════════════════════════════════════════════════════════════
+// Búsqueda k=1 con filtros (banned + forced prefix) — Core CGR
+// ═══════════════════════════════════════════════════════════════════════════
+
 Route cgr_best_route_filtered(const Contact *C, int N, const CgrParams *P,
                               const NeighborIndex *NI, const CgrFilters *F)
 {
-    Route R = {.contact_ids=NULL, .hops=0, .eta=DBL_MAX, .found=false};
-    if(!P || !NI) return R;
+    Route R = {.contact_ids = NULL, .hops = 0, .eta = DBL_MAX, .found = false};
+    
+    // Validación de entrada
+    if (!P || !NI || !C || N <= 0) {
+        DEBUG_PRINT("ERROR: Parámetros inválidos\n");
+        return R;
+    }
+    
+    if (P->src_node < 0 || P->src_node >= NI->node_cap) {
+        DEBUG_PRINT("ERROR: Nodo origen %d fuera de rango [0,%d)\n", P->src_node, NI->node_cap);
+        return R;
+    }
+    
+    if (P->dst_node < 0 || P->dst_node >= NI->node_cap) {
+        DEBUG_PRINT("ERROR: Nodo destino %d fuera de rango [0,%d)\n", P->dst_node, NI->node_cap);
+        return R;
+    }
 
-    // Labels
-    Label *lab = (Label*)malloc(sizeof(Label)*N);
-    for(int i=0;i<N;i++){ lab[i].contact_idx=i; lab[i].eta=DBL_MAX; lab[i].prev_idx=-1; }
+    DEBUG_PRINT("Búsqueda %d→%d, bytes=%.0f, t0=%.3f\n", 
+                P->src_node, P->dst_node, P->bundle_bytes, P->t0);
+
+    // Inicializar labels (uno por contacto)
+    Label *lab = (Label*)malloc(sizeof(Label) * N);
+    if (!lab) return R;
+    
+    for (int i = 0; i < N; i++) {
+        lab[i].contact_idx = i;
+        lab[i].eta = DBL_MAX;
+        lab[i].prev_idx = -1;
+    }
 
     MinHeap *pq = heap_new(64);
+    if (!pq) {
+        free(lab);
+        return R;
+    }
+    
     double expiry_abs = (P->expiry > 0.0) ? (P->t0 + P->expiry) : 0.0;
 
-    // Semilla
-    if(F && F->forced_prefix_ids && F->forced_count > 0){
+    // ─────────────────────────────────────────────────────────────────────
+    // Semilla: inicializar desde el nodo origen
+    // ─────────────────────────────────────────────────────────────────────
+    
+    if (F && F->forced_prefix_ids && F->forced_count > 0) {
+        // Modo prefijo forzado: buscar el primer contacto específico
         int first_id = forced_id_at(F, 0);
-        // Ese primer contacto debe salir de src
-        for(int ci=0; ci<N; ci++){
-            if(C[ci].id != first_id) continue;
-            if(C[ci].from != P->src_node) continue;
-            if(is_banned_id(C[ci].id, F)) continue;
-
+        DEBUG_PRINT("Buscando prefijo forzado, primer contacto=%d\n", first_id);
+        
+        for (int ci = 0; ci < N; ci++) {
+            if (C[ci].id != first_id) continue;
+            if (C[ci].from != P->src_node) continue;
+            if (is_banned_id(C[ci].id, F)) continue;
+            
+            // Pre-check rápido
+            if (!contact_is_viable(&C[ci], P->t0, P->bundle_bytes)) continue;
+            
             double eta = eta_contact(&C[ci], P->t0, P->bundle_bytes, expiry_abs);
-            if(eta == DBL_MAX) continue;
+            if (eta == DBL_MAX) continue;
 
             lab[ci].eta = eta;
             lab[ci].prev_idx = -1;
-            heap_push(pq, (Label){ .contact_idx=ci, .eta=eta, .prev_idx=-1 });
-            break; // solo ese
+            heap_push(pq, (Label){.contact_idx = ci, .eta = eta, .prev_idx = -1});
+            DEBUG_PRINT("Semilla: contacto %d (id=%d), eta=%.3f\n", ci, C[ci].id, eta);
+            break; // Solo uno
         }
     } else {
-        if(P->src_node >= 0 && P->src_node < NI->node_cap){
+        // Modo normal: todos los contactos que salen del origen
+        if (P->src_node >= 0 && P->src_node < NI->node_cap) {
             IndexList L = NI->by_from[P->src_node];
-            for(int k=0;k<L.count;k++){
+            DEBUG_PRINT("Semilla: %d contactos desde nodo %d\n", L.count, P->src_node);
+            
+            for (int k = 0; k < L.count; k++) {
                 int ci = L.idxs[k];
-                if(F && is_banned_id(C[ci].id, F)) continue;
+                
+                if (F && is_banned_id(C[ci].id, F)) continue;
+                
+                // Pre-check rápido
+                if (!contact_is_viable(&C[ci], P->t0, P->bundle_bytes)) continue;
+                
                 double eta = eta_contact(&C[ci], P->t0, P->bundle_bytes, expiry_abs);
-                if(eta==DBL_MAX) continue;
-                if(eta < lab[ci].eta){
+                if (eta == DBL_MAX) continue;
+                
+                if (eta < lab[ci].eta) {
                     lab[ci].eta = eta;
                     lab[ci].prev_idx = -1;
-                    heap_push(pq, (Label){ .contact_idx=ci, .eta=eta, .prev_idx=-1 });
+                    heap_push(pq, (Label){.contact_idx = ci, .eta = eta, .prev_idx = -1});
+                    DEBUG_PRINT("  Semilla: contacto %d (id=%d), eta=%.3f\n", ci, C[ci].id, eta);
                 }
             }
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────
     // Dijkstra temporal
+    // ─────────────────────────────────────────────────────────────────────
+    
     int best_end = -1;
     double best_eta = DBL_MAX;
+    int expansions = 0;
 
-    while(!heap_empty(pq)){
+    while (!heap_empty(pq)) {
         Label cur = heap_pop(pq);
         int ci = cur.contact_idx;
         double eta_here = cur.eta;
+        
+        expansions++;
 
-        if(eta_here > lab[ci].eta + 1e-12) continue; // label desactualizada
+        // Label desactualizada (ya procesamos este contacto con mejor ETA)
+        if (eta_here > lab[ci].eta + EPS_TIME) continue;
 
         // ¿Cuánto prefijo hemos cumplido en esta ruta?
         int prefix_done = compute_prefix_done(ci, lab, C, F);
 
-        // ¿Destino?
-        if(C[ci].to == P->dst_node){
+        // ¿Llegamos al destino?
+        if (C[ci].to == P->dst_node) {
             // Si hay prefijo, asegúrate de que está completo
-            if(!(F && F->forced_prefix_ids && F->forced_count>0) || prefix_done >= F->forced_count){
+            if (!(F && F->forced_prefix_ids && F->forced_count > 0) || 
+                prefix_done >= F->forced_count) {
                 best_end = ci;
                 best_eta = eta_here;
-                break; // óptimo por Dijkstra
+                DEBUG_PRINT("✓ Destino alcanzado: contacto %d (id=%d), eta=%.3f, expansiones=%d\n",
+                           ci, C[ci].id, eta_here, expansions);
+                break; // Óptimo por Dijkstra
             }
         }
 
-        // Expandir vecinos
+        // Expandir vecinos desde el nodo destino de este contacto
         int next_node = C[ci].to;
-        if(next_node < 0 || next_node >= NI->node_cap) continue;
+        if (next_node < 0 || next_node >= NI->node_cap) continue;
 
         IndexList L = NI->by_from[next_node];
 
         // ¿Aún falta un contacto específico del prefijo?
         int need_forced_next = -1;
-        if(F && F->forced_prefix_ids && F->forced_count>0 && prefix_done < F->forced_count){
+        if (F && F->forced_prefix_ids && F->forced_count > 0 && prefix_done < F->forced_count) {
             need_forced_next = forced_id_at(F, prefix_done);
+            DEBUG_PRINT("  Requiere contacto forzado #%d: id=%d\n", prefix_done, need_forced_next);
         }
 
-        for(int kk=0; kk<L.count; kk++){
+        for (int kk = 0; kk < L.count; kk++) {
             int nj = L.idxs[kk];
 
-            if(need_forced_next != -1 && C[nj].id != need_forced_next) continue; // exige el siguiente del prefijo
-            if(F && is_banned_id(C[nj].id, F)) continue;
+            // Filtros
+            if (need_forced_next != -1 && C[nj].id != need_forced_next) continue;
+            if (F && is_banned_id(C[nj].id, F)) continue;
+            
+            // Pre-check rápido antes de calcular ETA completo
+            if (!contact_is_viable(&C[nj], eta_here, P->bundle_bytes)) continue;
 
             double eta_n = eta_contact(&C[nj], eta_here, P->bundle_bytes, expiry_abs);
-            if(eta_n == DBL_MAX) continue;
+            if (eta_n == DBL_MAX) continue;
 
-            if(eta_n + 1e-12 < lab[nj].eta){
+            // Actualizar si es mejor
+            if (eta_n + EPS_TIME < lab[nj].eta) {
                 lab[nj].eta = eta_n;
                 lab[nj].prev_idx = ci;
-                heap_push(pq, (Label){ .contact_idx=nj, .eta=eta_n, .prev_idx=ci });
+                heap_push(pq, (Label){.contact_idx = nj, .eta = eta_n, .prev_idx = ci});
             }
         }
     }
 
     heap_free(pq);
 
-    if(best_end == -1){
+    if (best_end == -1) {
+        DEBUG_PRINT("✗ No se encontró ruta (expansiones=%d)\n", expansions);
         free(lab);
-        return R; // no encontrada
+        return R; // No encontrada
     }
 
-    // Reconstrucción de ruta
+    // ─────────────────────────────────────────────────────────────────────
+    // Reconstrucción de ruta (backtracking)
+    // ─────────────────────────────────────────────────────────────────────
+    
     int cap = 16, len = 0;
-    int *rev = (int*)malloc(sizeof(int)*cap);
+    int *rev = (int*)malloc(sizeof(int) * cap);
+    if (!rev) {
+        free(lab);
+        return R;
+    }
+    
     int cur = best_end;
-    while(cur != -1){
-        if(len>=cap){ cap*=2; rev = (int*)realloc(rev, sizeof(int)*cap); }
+    while (cur != -1) {
+        if (len >= cap) {
+            cap *= 2;
+            int *new_rev = (int*)realloc(rev, sizeof(int) * cap);
+            if (!new_rev) {
+                free(rev);
+                free(lab);
+                return R;
+            }
+            rev = new_rev;
+        }
         rev[len++] = cur;
         cur = lab[cur].prev_idx;
     }
-    R.contact_ids = (int*)malloc(sizeof(int)*len);
-    for(int i=0;i<len;i++){
-        R.contact_ids[i] = C[rev[len-1-i]].id;
+    
+    // Invertir para obtener orden correcto
+    R.contact_ids = (int*)malloc(sizeof(int) * len);
+    if (!R.contact_ids) {
+        free(rev);
+        free(lab);
+        return R;
+    }
+    
+    for (int i = 0; i < len; i++) {
+        R.contact_ids[i] = C[rev[len - 1 - i]].id;
     }
     R.hops = len;
-    R.eta  = best_eta;
+    R.eta = best_eta;
     R.found = true;
+
+    DEBUG_PRINT("✓ Ruta reconstruida: %d saltos, eta=%.3f\n", len, best_eta);
 
     free(rev);
     free(lab);
     return R;
 }
 
-void free_route(Route *r){
-    if(!r) return;
+void free_route(Route *r) {
+    if (!r) return;
     free(r->contact_ids);
     r->contact_ids = NULL;
     r->hops = 0;
@@ -263,40 +446,65 @@ void free_route(Route *r){
     r->found = false;
 }
 
-/*-----------------------------------------------------------------------------
-  K rutas por CONSUMO (modo práctico)
------------------------------------------------------------------------------*/
-static void consume_capacity(Contact *C, int N, const Route *route, const CgrParams *P){
-    if(!route->found || route->hops<=0) return;
+// ═══════════════════════════════════════════════════════════════════════════
+// K rutas por CONSUMO (modo práctico)
+// ═══════════════════════════════════════════════════════════════════════════
 
-    for(int step=0; step<route->hops; step++){
+static void consume_capacity(Contact *C, int N, const Route *route, const CgrParams *P) {
+    if (!route->found || route->hops <= 0) return;
+
+    DEBUG_PRINT("Consumiendo capacidad para ruta con %d saltos\n", route->hops);
+
+    for (int step = 0; step < route->hops; step++) {
         int id = route->contact_ids[step];
-        for(int i=0;i<N;i++){
-            if(C[i].id == id){
+        for (int i = 0; i < N; i++) {
+            if (C[i].id == id) {
                 double bytes = P->bundle_bytes;
-                if(C[i].residual_bytes >= bytes) C[i].residual_bytes -= bytes;
-                else C[i].residual_bytes = 0.0;
+                double prev = C[i].residual_bytes;
+                
+                if (C[i].residual_bytes >= bytes) {
+                    C[i].residual_bytes -= bytes;
+                } else {
+                    C[i].residual_bytes = 0.0;
+                }
+                
+                DEBUG_PRINT("  Contacto %d: %.0f → %.0f bytes\n", 
+                           id, prev, C[i].residual_bytes);
                 break;
             }
         }
     }
 }
 
-Routes cgr_k_routes(const Contact *C_in, int N, const CgrParams *P, const NeighborIndex *NI, int K){
-    Routes RS = {.items=NULL, .count=0, .cap=0};
-    if(K <= 0) return RS;
+Routes cgr_k_routes(const Contact *C_in, int N, const CgrParams *P, const NeighborIndex *NI, int K) {
+    Routes RS = {.items = NULL, .count = 0, .cap = 0};
+    
+    if (K <= 0 || !C_in || !P || !NI) return RS;
 
-    Contact *C = (Contact*)malloc(sizeof(Contact)*N);
-    memcpy(C, C_in, sizeof(Contact)*N);
+    DEBUG_PRINT("K rutas por consumo: K=%d\n", K);
+
+    // Copia de trabajo (consumiremos capacidad)
+    Contact *C = (Contact*)malloc(sizeof(Contact) * N);
+    if (!C) return RS;
+    
+    memcpy(C, C_in, sizeof(Contact) * N);
 
     RS.cap = K;
     RS.items = (Route*)calloc(RS.cap, sizeof(Route));
+    if (!RS.items) {
+        free(C);
+        return RS;
+    }
 
-    for(int k=0; k<K; k++){
+    for (int k = 0; k < K; k++) {
+        DEBUG_PRINT("Iteración K=%d/%d\n", k + 1, K);
+        
         Route r = cgr_best_route(C, N, P, NI);
-        if(!r.found){
+        if (!r.found) {
+            DEBUG_PRINT("No hay más rutas disponibles\n");
             break;
         }
+        
         RS.items[RS.count++] = r;
         consume_capacity(C, N, &r, P);
     }
@@ -305,34 +513,46 @@ Routes cgr_k_routes(const Contact *C_in, int N, const CgrParams *P, const Neighb
     return RS;
 }
 
-/*-----------------------------------------------------------------------------
-  K rutas Yen-lite (diversidad sin consumo)
------------------------------------------------------------------------------*/
-Routes cgr_k_yen(const Contact *C, int N, const CgrParams *P, const NeighborIndex *NI, int K){
-    Routes out = {.items=NULL, .count=0, .cap=0};
-    if(K <= 0) return out;
+// ═══════════════════════════════════════════════════════════════════════════
+// K rutas Yen-lite (diversidad sin consumo)
+// ═══════════════════════════════════════════════════════════════════════════
+
+Routes cgr_k_yen(const Contact *C, int N, const CgrParams *P, const NeighborIndex *NI, int K) {
+    Routes out = {.items = NULL, .count = 0, .cap = 0};
+    
+    if (K <= 0 || !C || !P || !NI) return out;
+
+    DEBUG_PRINT("K rutas Yen-lite: K=%d\n", K);
 
     out.cap = K;
     out.items = (Route*)calloc(K, sizeof(Route));
+    if (!out.items) return out;
 
-    // Ruta base
+    // Ruta base (sin filtros)
     Route base = cgr_best_route_filtered(C, N, P, NI, NULL);
-    if(!base.found){
+    if (!base.found) {
+        DEBUG_PRINT("No existe ruta base\n");
         return out;
     }
+    
     out.items[out.count++] = base;
+    DEBUG_PRINT("Ruta base: %d saltos, eta=%.3f\n", base.hops, base.eta);
 
-    for(int k=1; k<K; k++){
-        double best_eta = 1e300;
-        Route best = (Route){0};
+    // Generar rutas alternativas
+    for (int k = 1; k < K; k++) {
+        double best_eta = DBL_MAX;
+        Route best = {.contact_ids = NULL, .hops = 0, .eta = DBL_MAX, .found = false};
 
-        const Route *prev = &out.items[k-1];
-        // probamos desvío en cada posición
-        for(int i=0; i<prev->hops; i++){
-            // Prefijo forzado: [0..i-1]
+        const Route *prev = &out.items[k - 1];
+        
+        DEBUG_PRINT("Buscando ruta alternativa #%d (base: %d saltos)\n", k + 1, prev->hops);
+
+        // Probar desvío en cada posición de la ruta anterior
+        for (int i = 0; i < prev->hops; i++) {
+            // Prefijo forzado: contactos [0..i-1]
             CgrFilters F;
             memset(&F, 0, sizeof(F));
-            F.forced_prefix_ids = prev->contact_ids; // apunta al array de la ruta previa
+            F.forced_prefix_ids = prev->contact_ids;
             F.forced_count = i;
 
             // Contacto baneado: el i-ésimo de la ruta previa
@@ -340,37 +560,60 @@ Routes cgr_k_yen(const Contact *C, int N, const CgrParams *P, const NeighborInde
             F.banned_ids = &banned_one;
             F.banned_count = 1;
 
+            DEBUG_PRINT("  Desvío en pos %d: prefijo=%d, ban=%d\n", i, F.forced_count, banned_one);
+
             Route cand = cgr_best_route_filtered(C, N, P, NI, &F);
-            if(!cand.found) continue;
+            if (!cand.found) continue;
 
             // Evitar duplicado exacto con la anterior
             int same = (cand.hops == prev->hops);
-            if(same){
-                for(int t=0; t<cand.hops; t++){
-                    if(cand.contact_ids[t] != prev->contact_ids[t]) { same=0; break; }
+            if (same) {
+                for (int t = 0; t < cand.hops; t++) {
+                    if (cand.contact_ids[t] != prev->contact_ids[t]) {
+                        same = 0;
+                        break;
+                    }
                 }
             }
-            if(same){ free_route(&cand); continue; }
+            
+            if (same) {
+                DEBUG_PRINT("    → Descartada (duplicado)\n");
+                free_route(&cand);
+                continue;
+            }
 
-            if(cand.eta < best_eta){
-                if(best.found) free_route(&best);
+            // Quedarnos con la mejor alternativa
+            if (cand.eta < best_eta) {
+                if (best.found) free_route(&best);
                 best = cand;
                 best_eta = cand.eta;
+                DEBUG_PRINT("    → Mejor candidata: eta=%.3f\n", best_eta);
             } else {
                 free_route(&cand);
             }
         }
 
-        if(!best.found) break;
+        if (!best.found) {
+            DEBUG_PRINT("No hay más alternativas diversas\n");
+            break;
+        }
+        
         out.items[out.count++] = best;
+        DEBUG_PRINT("✓ Ruta alternativa #%d: %d saltos, eta=%.3f\n", k + 1, best.hops, best.eta);
     }
 
     return out;
 }
 
-void free_routes(Routes *rs){
-    if(!rs || !rs->items) return;
-    for(int i=0;i<rs->count;i++) free_route(&rs->items[i]);
+void free_routes(Routes *rs) {
+    if (!rs || !rs->items) return;
+    
+    for (int i = 0; i < rs->count; i++) {
+        free_route(&rs->items[i]);
+    }
+    
     free(rs->items);
-    rs->items=NULL; rs->count=0; rs->cap=0;
+    rs->items = NULL;
+    rs->count = 0;
+    rs->cap = 0;
 }

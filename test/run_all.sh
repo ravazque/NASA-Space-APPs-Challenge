@@ -40,14 +40,14 @@ run_case () {
   fi
   # salida JSON compacta (por defecto)
   local out_json
-  if ! out_json="$("${cmd[@]}")"; then
+  if ! out_json="$("${cmd[@]}" 2>/dev/null)"; then
     echo "$(basename "$case"),$mode,$k,$src,$dst,$bytes,false,0,0,0,false,exec_error" >> "$RESULTS"
     return
   fi
 
   # Valida y vuelca línea CSV
   local val
-  if ! val="$(python3 "$VAL" --contacts "$case" --json "$out_json" --bytes "$bytes" --mode "$mode")"; then
+  if ! val="$(python3 "$VAL" --contacts "$case" --json "$out_json" --bytes "$bytes" --mode "$mode" 2>/dev/null)"; then
     echo "$(basename "$case"),$mode,$k,$src,$dst,$bytes,false,0,0,0,false,validator_error" >> "$RESULTS"
     return
   fi
@@ -66,11 +66,17 @@ BYTES_LARGE=150000000
 for c in "$CASES"/*.csv; do
   base="$(basename "$c")"
 
-  # src/dst anotados en la línea META del CSV
-  src="$(awk -F'[,_]' '/^# META/{print $4}' "$c")"
-  dst="$(awk -F'[,_]' '/^# META/{print $6}' "$c")"
-  [ -z "${src:-}" ] && src=100
-  [ -z "${dst:-}" ] && dst=200
+  # ✅ FIX: Parsing correcto de META (usar solo ',' como delimitador)
+  src="$(awk -F',' '/^# META/{print $3}' "$c" | tr -d ' ')"
+  dst="$(awk -F',' '/^# META/{print $5}' "$c" | tr -d ' ')"
+  
+  # Validación: si está vacío o no es número, usar defaults
+  if ! [[ "$src" =~ ^[0-9]+$ ]]; then
+    src=100
+  fi
+  if ! [[ "$dst" =~ ^[0-9]+$ ]]; then
+    dst=200
+  fi
 
   case "$base" in
     small_*) bytes=$BYTES_SMALL ;;
@@ -99,4 +105,3 @@ total=$((pass+fail))
   echo "  ❌ KO: $fail"
   echo "Detalles: $RESULTS"
 } | tee "$OUT/summary.txt"
-

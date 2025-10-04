@@ -1,10 +1,12 @@
-// src/main.c — CLI: salida estética (--pretty) y formato texto (--format text)
-// Soporta: k por consumo (--k) y K Yen-lite (--k-yen)
+// src/main.c — CLI mejorado con validación de entrada
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <float.h>
 #include <stdbool.h>
+#include <limits.h>
+#include <errno.h>
+#include <ctype.h>
 #include "csv.h"
 #include "cgr.h"
 
@@ -24,11 +26,34 @@ static void usage(const char* prog){
     prog);
 }
 
-static int parse_int(const char *s){ return (int)strtol(s, NULL, 10); }
-static double parse_double(const char *s){ return strtod(s, NULL); }
+// ✅ FIX: Validación robusta de enteros
+static int parse_int_safe(const char *s, int *out){
+    char *endptr;
+    errno = 0;
+    long val = strtol(s, &endptr, 10);
+    
+    // Validar: no vacío, sin basura al final, rango válido
+    if (endptr == s || *endptr != '\0' || errno == ERANGE || val < 0 || val > INT_MAX) {
+        return -1;
+    }
+    *out = (int)val;
+    return 0;
+}
 
-/* ----------------------- Helpers de impresión ----------------------- */
+// ✅ FIX: Validación robusta de doubles
+static int parse_double_safe(const char *s, double *out){
+    char *endptr;
+    errno = 0;
+    double val = strtod(s, &endptr);
+    
+    if (endptr == s || *endptr != '\0' || errno == ERANGE || val < 0.0) {
+        return -1;
+    }
+    *out = val;
+    return 0;
+}
 
+/* ----------------------- Helpers de impresión (sin cambios) ----------------------- */
 static void print_json_route_compact(const Route *R, double t0){
     printf("{\"eta\":%.6f,\"latency\":%.6f,\"hops\":%d,\"contacts\":[",
            R->eta, R->eta - t0, R->hops);
@@ -39,7 +64,6 @@ static void print_json_route_compact(const Route *R, double t0){
 }
 
 static void print_json_route_pretty(const Route *R, double t0, int indent){
-    // indent es número de espacios previos
     const char *sp = "                                                                ";
     int pad = indent < 64 ? indent : 64;
     printf("%.*s{\n", pad, sp);
@@ -145,36 +169,113 @@ int main(int argc, char **argv){
     const char *contacts_path = NULL;
     CgrParams P = { .src_node=-1, .dst_node=-1, .t0=0.0, .bundle_bytes=0.0, .expiry=0.0 };
     int K_consume = 1;
-    int K_yen = 0; // si >0, usamos yen
+    int K_yen = 0;
     int pretty = 0;
     OutputFmt fmt = FMT_JSON;
 
+    // ✅ FIX: Parsing con validación
     for(int i=1;i<argc;i++){
-        if(!strcmp(argv[i],"--contacts") && i+1<argc) contacts_path = argv[++i];
-        else if(!strcmp(argv[i],"--src") && i+1<argc) P.src_node = parse_int(argv[++i]);
-        else if(!strcmp(argv[i],"--dst") && i+1<argc) P.dst_node = parse_int(argv[++i]);
-        else if(!strcmp(argv[i],"--t0")  && i+1<argc) P.t0 = parse_double(argv[++i]);
-        else if(!strcmp(argv[i],"--bytes") && i+1<argc) P.bundle_bytes = parse_double(argv[++i]);
-        else if(!strcmp(argv[i],"--expiry") && i+1<argc) P.expiry = parse_double(argv[++i]);
-        else if(!strcmp(argv[i],"--k") && i+1<argc) K_consume = parse_int(argv[++i]);
-        else if(!strcmp(argv[i],"--k-yen") && i+1<argc) K_yen = parse_int(argv[++i]);
-        else if(!strcmp(argv[i],"--pretty")) pretty = 1;
+        if(!strcmp(argv[i],"--contacts") && i+1<argc) {
+            contacts_path = argv[++i];
+        }
+        else if(!strcmp(argv[i],"--src") && i+1<argc) {
+            if(parse_int_safe(argv[i+1], &P.src_node) != 0){
+                fprintf(stderr, "Error: --src debe ser un entero válido ≥0 (recibido: '%s')\n", argv[i+1]);
+                return 2;
+            }
+            i++;
+        }
+        else if(!strcmp(argv[i],"--dst") && i+1<argc) {
+            if(parse_int_safe(argv[i+1], &P.dst_node) != 0){
+                fprintf(stderr, "Error: --dst debe ser un entero válido ≥0 (recibido: '%s')\n", argv[i+1]);
+                return 2;
+            }
+            i++;
+        }
+        else if(!strcmp(argv[i],"--t0")  && i+1<argc) {
+            if(parse_double_safe(argv[i+1], &P.t0) != 0){
+                fprintf(stderr, "Error: --t0 debe ser un número ≥0 (recibido: '%s')\n", argv[i+1]);
+                return 2;
+            }
+            i++;
+        }
+        else if(!strcmp(argv[i],"--bytes") && i+1<argc) {
+            if(parse_double_safe(argv[i+1], &P.bundle_bytes) != 0){
+                fprintf(stderr, "Error: --bytes debe ser un número ≥0 (recibido: '%s')\n", argv[i+1]);
+                return 2;
+            }
+            i++;
+        }
+        else if(!strcmp(argv[i],"--expiry") && i+1<argc) {
+            if(parse_double_safe(argv[i+1], &P.expiry) != 0){
+                fprintf(stderr, "Error: --expiry debe ser un número ≥0 (recibido: '%s')\n", argv[i+1]);
+                return 2;
+            }
+            i++;
+        }
+        else if(!strcmp(argv[i],"--k") && i+1<argc) {
+            if(parse_int_safe(argv[i+1], &K_consume) != 0 || K_consume < 1){
+                fprintf(stderr, "Error: --k debe ser un entero ≥1 (recibido: '%s')\n", argv[i+1]);
+                return 2;
+            }
+            i++;
+        }
+        else if(!strcmp(argv[i],"--k-yen") && i+1<argc) {
+            if(parse_int_safe(argv[i+1], &K_yen) != 0){
+                fprintf(stderr, "Error: --k-yen debe ser un entero ≥0 (recibido: '%s')\n", argv[i+1]);
+                return 2;
+            }
+            i++;
+        }
+        else if(!strcmp(argv[i],"--pretty")) {
+            pretty = 1;
+        }
         else if(!strcmp(argv[i],"--format") && i+1<argc){
             const char *v = argv[++i];
             if(!strcmp(v,"text")) fmt = FMT_TEXT;
-            else fmt = FMT_JSON;
+            else if(!strcmp(v,"json")) fmt = FMT_JSON;
+            else {
+                fprintf(stderr, "Error: --format debe ser 'text' o 'json' (recibido: '%s')\n", v);
+                return 2;
+            }
         }
-        else { usage(argv[0]); return 2; }
+        else { 
+            fprintf(stderr, "Error: argumento desconocido o faltante: %s\n", argv[i]);
+            usage(argv[0]); 
+            return 2; 
+        }
     }
 
-    if(!contacts_path || P.src_node<0 || P.dst_node<0 || P.bundle_bytes<=0.0){
-        usage(argv[0]); return 2;
+    // ✅ FIX: Validación mejorada
+    if(!contacts_path){
+        fprintf(stderr, "Error: falta --contacts <archivo>\n");
+        usage(argv[0]); 
+        return 2;
+    }
+    if(P.src_node < 0){
+        fprintf(stderr, "Error: falta --src <nodo> o valor inválido\n");
+        usage(argv[0]); 
+        return 2;
+    }
+    if(P.dst_node < 0){
+        fprintf(stderr, "Error: falta --dst <nodo> o valor inválido\n");
+        usage(argv[0]); 
+        return 2;
+    }
+    if(P.bundle_bytes <= 0.0){
+        fprintf(stderr, "Error: --bytes debe ser > 0 (recibido: %.0f)\n", P.bundle_bytes);
+        usage(argv[0]); 
+        return 2;
     }
     if(K_consume < 1) K_consume = 1;
     if(K_yen < 0) K_yen = 0;
 
-    Contact *C=NULL; int N = load_contacts_csv(contacts_path, &C);
-    if(N<=0){ fprintf(stderr,"Error: no contacts loaded from %s\n", contacts_path); return 1; }
+    Contact *C=NULL; 
+    int N = load_contacts_csv(contacts_path, &C);
+    if(N<=0){ 
+        fprintf(stderr,"Error: no se pudieron cargar contactos desde %s\n", contacts_path); 
+        return 1; 
+    }
 
     NeighborIndex *NI = build_neighbor_index(C, N);
 
