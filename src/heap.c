@@ -1,6 +1,4 @@
 
-// src/heap.c — Implementación de min-heap para Labels
-
 #include <stdlib.h>
 #include "heap.h"
 

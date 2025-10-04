@@ -3,15 +3,24 @@
 
 #include "cgr.h"
 
-typedef struct {
-    const char *dataset_id;       // p.ej., "abcd-1234"
-    const char *app_token;        // opcional: X-App-Token (Socrata)
-    int         sod_limit;        // tamaño de página CSV
-    int         update_interval_s;// reservado para refrescos
+#define NASA_PROVIDER_SODA   1
+#define NASA_PROVIDER_CUSTOM 2
+
+#ifndef NASA_PROVIDER
+#define NASA_PROVIDER NASA_PROVIDER_SODA
+#endif
+
+typedef struct
+{
+    const char *dataset_id;
+    const char *app_token;
+    int         sod_limit;
+    int         update_interval_s;
 } NasaApiConfig;
 
 int nasa_api_fetch_contacts(const NasaApiConfig *cfg, Contact **out_contacts);
-int nasa_api_update_if_needed(const NasaApiConfig *cfg, double sim_time,
-                              Contact **out_contacts, int *out_count);
+
+int nasa_api_update_if_needed(const NasaApiConfig *cfg, double sim_time, Contact **out_contacts, int *out_count);
 
 #endif
+

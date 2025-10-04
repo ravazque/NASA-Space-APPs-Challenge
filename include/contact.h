@@ -3,7 +3,8 @@
 #include <stdbool.h>
 
 // Un "contacto" es una ventana de enlace programada entre dos nodos (from -> to).
-typedef struct {
+typedef struct
+{
     int id;               // identificador único del contacto (para reportar la ruta)
     int from;             // id del nodo origen (SAT/GS)
     int to;               // id del nodo destino (SAT/GS)
@@ -16,14 +17,16 @@ typedef struct {
 } Contact;
 
 // Etiqueta de estado para Dijkstra temporal (una por contacto).
-typedef struct {
+typedef struct
+{
     int contact_idx;   // índice del contacto (posición en el array C[])
     double eta;        // earliest arrival time al FINAL del contacto
     int prev_idx;      // backpointer: índice del contacto previo, -1 si raíz
 } Label;
 
 // Resultado de UNA ruta
-typedef struct {
+typedef struct
+{
     int *contact_ids;  // ids de los contactos en orden (no índices)
     int hops;          // número de saltos (contactos)
     double eta;        // ETA final (s)
@@ -31,7 +34,8 @@ typedef struct {
 } Route;
 
 // Parámetros de un enrutamiento (para un bundle)
-typedef struct {
+typedef struct
+{
     int src_node;       // nodo origen (SAT/GS)
     int dst_node;       // nodo destino (SAT/GS)
     double t0;          // tiempo de salida/creación del bundle (s)
@@ -40,7 +44,8 @@ typedef struct {
 } CgrParams;
 
 // Conjunto de rutas (K rutas)
-typedef struct {
+typedef struct
+{
     Route *items;       // array de rutas
     int count;          // cuántas rutas válidas se obtuvieron
     int cap;            // capacidad del array

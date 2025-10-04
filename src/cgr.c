@@ -1,5 +1,3 @@
-// src/cgr.c — CGR: Dijkstra temporal (k=1), K por consumo y K Yen-lite (con filtros) — C puro
-// Versión mejorada con robustez, optimizaciones y fix de duplicados en Yen
 
 #include <stdlib.h>
 #include <string.h>
@@ -205,20 +203,21 @@ static double eta_contact(const Contact *c, double t_in, double bundle_bytes, do
     return eta;
 }
 
-// ✅ NUEVA: Métrica compuesta que considera LEO (DESPUÉS de eta_contact)
-static double eta_contact_leo(const Contact *c, double t_in, double bundle_bytes, 
-                              double expiry_abs, int prefer_isl) {
-    double base_eta = eta_contact(c, t_in, bundle_bytes, expiry_abs);
+// ✅ NUEVA: Métrica compuesta que considera LEO (DESPUÉS de eta_contact) NOT USED
+
+// static double eta_contact_leo(const Contact *c, double t_in, double bundle_bytes, 
+//                               double expiry_abs, int prefer_isl) {
+//     double base_eta = eta_contact(c, t_in, bundle_bytes, expiry_abs);
     
-    if (base_eta == DBL_MAX || !prefer_isl) return base_eta;
+//     if (base_eta == DBL_MAX || !prefer_isl) return base_eta;
     
-    // Aplicar penalización por tipo de enlace
-    LeoMetrics m = compute_leo_metrics(c, t_in);
-    double penalty = link_type_penalty(m.link_type);
+//     // Aplicar penalización por tipo de enlace
+//     LeoMetrics m = compute_leo_metrics(c, t_in);
+//     double penalty = link_type_penalty(m.link_type);
     
-    // Añadir penalización temporal (favorece ISL sin cambiar ETA real)
-    return base_eta + penalty;
-}
+//     // Añadir penalización temporal (favorece ISL sin cambiar ETA real)
+//     return base_eta + penalty;
+// }
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Búsqueda k=1 (wrapper sin filtros)

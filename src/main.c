@@ -1,4 +1,4 @@
-// src/main.c — CLI mejorado con validación de entrada y salida mejorada
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

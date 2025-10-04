@@ -1,6 +1,4 @@
 
-// include/heap.h — Min-heap simple de Labels (ordenado por eta)
-
 #pragma once
 #include "contact.h"
 

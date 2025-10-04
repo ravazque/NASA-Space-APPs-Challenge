@@ -1,150 +1,138 @@
 
-# EcoStation CGR — Enrutamiento por Contact Graph para constelaciones LEO
+# EcoStation — CGR API (LEO)
 
-## 1) De qué va esto (para qué sirve)
+## Visión general
 
-**EcoStation CGR** es un motor de **enrutamiento DTN** (Delay/Disruption Tolerant Networking) pensado para **constelaciones LEO**. En estas redes, los satélites y estaciones sólo pueden comunicarse durante **ventanas de contacto**. El sistema calcula **rutas viables en el tiempo** (no sólo topológicas) para entregar un “bundle” de datos desde un **origen** a un **destino**, minimizando el **tiempo estimado de llegada (ETA)** y respetando:
+Este proyecto implementa **Contact Graph Routing (CGR)** para redes espaciales tipo **LEO–LEO / LEO–Tierra** usando **un único modo: API**. El binario `cgr_api` descarga un **plan de contactos** (ventanas de visibilidad, retardos, tasas y capacidad residual) desde un dataset SODA de **data.nasa.gov** y calcula la **ruta de mínima ETA** (Earliest Time of Arrival) para un bundle entre un **nodo origen** y un **nodo destino**.
 
-* Ventanas [inicio, fin] de cada enlace.
-* Latencia de establecimiento (**setup**), tiempo de transmisión (**rate × bytes**) y **propagación** (OWLT).
-* Opcionalmente, **capacidad residual**.
-
-> ¿Para qué se usa? Para **planificar rutas de datos** en redes con enlaces intermitentes: satélite–satélite (ISL) o satélite–tierra (GS), donde la conectividad cambia con la órbita.
+Además, incorpora un **aprendizaje ligero opcional** (muy barato en CPU/RAM) que ajusta el coste de los enlaces en función de la espera observada y/o del consumo de capacidad, mejorando la estabilidad de las rutas frente a congestión o solapamiento de ventanas.
 
 ---
 
-## 2) El problema en simple
+## ¿Qué problema resuelve?
 
-En LEO, los enlaces aparecen y desaparecen. No basta con saber “quién se conecta con quién”: hay que asegurarse de que **cada salto** puede empezar **a tiempo**, terminar **antes de que cierre** su ventana, y enlazar con el **siguiente**. Eso define un **grafo de contactos**: cada **contacto** es un “nodo” temporal y dos contactos se encadenan si **respetan la causalidad** (tiempos y nodos).
-
----
-
-## 3) ¿Cómo funciona el motor? (flujo lógico)
-
-1. **Entrada**: un **plan de contactos** (CSV) con filas del tipo: `id, from, to, t_start, t_end, owlt_s, rate_bps, setup_s, residual_bytes`.
-2. **Construcción del grafo temporal**: el motor indexa qué contactos pueden seguir a cuáles, respetando tiempos y continuidad de nodos.
-3. **Ruta óptima (k=1)**: se ejecuta un **Dijkstra temporal** que minimiza **ETA** (desde `t0`), descartando contactos donde **no cabe** el bundle por ventana o capacidad.
-4. **Rutas alternativas (K)**:
-
-   * **K consumo**: tras hallar una ruta, **descuelga capacidad** en los contactos usados y recalcula (rutas “realistas” con congestión).
-   * **K Yen-lite**: genera **rutas diversas** (sin consumir capacidad) aplicando desvíos/bans a prefijos del mejor camino.
-5. **Salida**: rutas con su **ETA**, **latencia total** y **secuencia de contactos**.
-
-> El objetivo por defecto es **minimizar ETA**. Se pueden añadir otras métricas (energía, número de saltos) como penalizaciones.
+En LEO, la topología cambia rápidamente: los enlaces entre satélites y estaciones existen sólo durante **ventanas** cortas y con **altas velocidades relativas**. En este contexto, CGR modela la red como un **grafo temporal de contactos** y selecciona una ruta **causal** (respetando disponibilidad temporal, *setup* y retardo OWLT) que minimiza la **ETA**.
 
 ---
 
-## 4) Modo “Live” (simulación en tiempo real)
+## Cómo funciona (lógica, sin código)
 
-El binario **`cgr_live`** ejecuta el ruteo en ciclos (p. ej., cada 10s de tiempo simulado) y muestra:
+1. **Ingesta por API**
 
-* **Ruta óptima** del ciclo (si existe), alternativas K, y **barra de progreso orbital**.
-* **Contactos activos** (ventanas abiertas en ese instante).
-* **Autoperiodificación** del plan: si el CSV representa sólo un tramo de tiempo, el sistema puede **repetir** ese tramo (como una órbita) para que **siempre** haya próximas ventanas.
+   * Se selecciona un **proveedor** de datos mediante una **macro** de compilación. Por defecto: `NASA_PROVIDER_SODA` (Socrata SODA, CSV).
+   * El módulo de API descarga un CSV con campos: `id, from, to, t_start, t_end, owlt, rate_bps, setup_s, residual_bytes`.
 
-### Autoperiodo (qué hace)
+2. **Construcción del grafo de contactos**
 
-* Detecta el **span temporal** del CSV: `max(t_end) - min(t_start)`.
-* Si **no** se pasa `--period`, usa ese **span** como **periodo**.
-* Antes de cada ciclo, **clona** las ventanas en los bloques `k` y `k+1` alrededor del tiempo actual, asegurando que haya **contactos futuros**.
+   * Cada fila es un **contacto dirigido** con ventana `[t_start, t_end)`.
+   * El coste efectivo por salto incluye **setup_s**, **retardo OWLT** y **tiempos de espera** si la transmisión debe aguantar hasta la apertura de la ventana.
 
-> Con esto, la simulación **no se “muere”** cuando `t0` supera la última ventana del CSV.
+3. **Búsqueda de ruta (CGR)**
 
----
+   * Se ejecuta un **Dijkstra temporal** sobre el grafo de contactos: sólo se enlazan contactos compatibles en el tiempo y el destino.
+   * Se devuelve la **ruta óptima** (mínima ETA) y, opcionalmente, **K alternativas** (variación tipo Yen, sin consumo de capacidad).
 
-## 5) Modos de ruteo disponibles
+4. **Aprendizaje ligero (opcional)**
 
-* **Baseline (k=1)**: mejor ruta por ETA con poda temporal/capacidad.
-* **K por consumo (`--k N`)**: tras cada camino elegido, **resta** `bundle_bytes` de `residual_bytes` en sus contactos y **recalcula**. Útil para simular uso de recursos.
-* **K Yen-lite (`--k-yen N`)**: obtiene rutas **diversificadas** deshabilitando por turnos segmentos del mejor camino. No toca capacidades.
-
-> En **Live**, por defecto se listan **K** alternativas con Yen-lite para ver variedad.
+   * **Consume**: tras utilizar una ruta, se **descuenta** `bundle_bytes` del `residual_bytes` de cada contacto usado (simula uso/carga).
+   * **EWMA**: se calcula una **penalización suave** por enlace con una media móvil exponencial sobre la **espera observada** en el primer salto; esta penalización se **inyecta** en el *setup* del enlace mediante un factor `lambda`.
+   * Efecto: el sistema evita “enamorarse” de un único enlace y estabiliza latencias cuando hay ventanas competidas.
 
 ---
 
-## 6) Datos y APIs que puede usar
+## Flujo de ejecución
 
-* **CSV local**: la fuente principal durante el desarrollo. Ej.: `data/contacts_realistic.csv`.
-* **API Socrata (data.nasa.gov)**: muchos datasets exponen endpoints SODA (JSON/CSV) que se podrían **mapear** al esquema de contactos. El módulo `nasa_api` está preparado para integrarse (stubs), y puede:
+1. **Inicio**: parseo de flags CLI (dataset, token, src/dst, `t0`, bytes, `k`, ciclos).
+2. **Descarga**: el módulo API obtiene el CSV y lo parsea a memoria.
+3. **Ciclo de planificación** (1 o varios ciclos):
 
-  * Intentar **fetch** de contactos por dataset-id.
-  * Caer en **fallback** al CSV local si la API no responde.
-* **api.nasa.gov**: opcional para enriquecer metadatos. No es imprescindible para el ruteo.
-
-> En producción, lo normal es **generar** el plan de contactos a partir de **efemérides orbitales** (p. ej., TLEs) y geometría de visibilidad. El motor admite cualquier fuente si respetas el **formato**.
+   * Construye o actualiza el índice de vecinos por tiempo/nodo.
+   * Ejecuta CGR y devuelve **ETA, latencia y path**.
+   * (Opcional) Aplica **consume** y/o **EWMA** para el próximo ciclo.
+   * Avanza el reloj simulado `tick` segundos y repite hasta `cycles`.
 
 ---
 
-## 7) Formato de entrada (CSV)
+## Diferencias y mejoras frente a CGR “puro”
 
-Cada fila describe **una ventana de contacto dirigida**:
+* **CGR clásico**: óptimo respecto al plan de contactos **estático**; tiende a repetir rutas idénticas cuando hay un enlace “muy bueno”, ignorando congestión.
+* **Este proyecto** añade, sin apenas coste de recursos:
 
-```
-id, from, to, t_start, t_end, owlt_s, rate_bps, setup_s, residual_bytes
-0,  100,  1,     0.0,   60.0,   0.020,  6000000,   0.1,     300000000
+  * **Consumo de capacidad** *(opcional)* → rutas más diversas y realistas.
+  * **Penalización EWMA** *(opcional)* → reduce esperas recurrentes y estabiliza la latencia media.
+
+**Resultado**: con **sobrecoste mínimo (O(hops) + O(E) por ciclo)**, se obtiene un rendimiento **más robusto** en escenarios con ventanas competidas, manteniendo la simplicidad del CGR.
+
+---
+
+## Macro del proveedor de API
+
+La selección del proveedor se hace en `include/nasa_api.h`:
+
+```c
+#define NASA_PROVIDER NASA_PROVIDER_SODA   // por defecto: SODA (data.nasa.gov)
+// #define NASA_PROVIDER NASA_PROVIDER_CUSTOM // plantilla para tu propia API
 ```
 
-* **from/to**: nodos (satélites/GS) lógicos.
-* **t_start/t_end**: segundos de tiempo simulado.
-* **owlt_s**: latencia de propagación.
-* **rate_bps**: capacidad instantánea (bits/s) usada para calcular tiempo de TX.
-* **setup_s**: retardo de establecimiento por contacto.
-* **residual_bytes**: capacidad restante (para el modo de consumo).
+Si cambias a `NASA_PROVIDER_CUSTOM`, implementa los *stubs* en `src/nasa_api.c` para tu backend.
 
 ---
 
-## 8) Métricas y decisiones
+## Uso rápido (CLI)
 
-* **Factibilidad** de un salto: cabe si `start_tx = max(t_in, t_start)` y
-  `start_tx + setup + (bytes/rate) ≤ t_end` **y** `residual_bytes ≥ bytes` (si se usa consumo).
-* **ETA** de un salto: `finish + owlt`.
-* **ETA de la ruta**: acumulación secuencial de los saltos.
-* **Selección de alternativas**: varia prefijos y aplica **bans** para diversificar caminos (Yen-lite), o **consume** capacidad para simular congestión.
+```bash
+# Compilar
+make
 
----
+# Una planificación (sin aprendizaje)
+./cgr_api \
+  --dataset abcd-1234 --app-token TU_TOKEN \
+  --src 100 --dst 200 --t0 0 --bytes 5e7 --k 3 --cycles 1
 
-## 9) Flujo típico de uso
+# Varios ciclos con aprendizaje ligero
+./cgr_api \
+  --dataset abcd-1234 --app-token TU_TOKEN \
+  --src 100 --dst 200 --t0 0 --bytes 5e7 --k 3 \
+  --cycles 30 --tick 10 --consume --learn-ewma --alpha 0.2 --lambda 1.0
+```
 
-1. **Prepara** un CSV de contactos realista.
-2. **Ejecuta** en modo línea de comandos (`cgr`) para obtener la mejor ruta o K rutas.
-3. **Simula** en vivo con `cgr_live` para ver cómo cambia el camino óptimo con el tiempo:
-   `./cgr_live --period 5400 --tick 10 --k 3 --bytes 5e7`
-4. **Compara** estrategias (baseline vs consumo vs Yen-lite) con los testers: generan casos, validan encadenados temporales y revisan capacidad.
+**Flags clave**
 
----
-
-## 10) Qué aporta respecto a un “CGR simple”
-
-* **Poda por capacidad/ventana** integrada (no sólo tiempos).
-* **K rutas con consumo**: útiles para planificación realista donde el uso de un enlace afecta rutas futuras.
-* **K rutas diversas** (Yen-lite) para evaluar **robustez** y **redundancia**.
-* **Simulación Live con autoperiodo** y **progreso**, para visualizar el comportamiento durante la órbita.
-
----
-
-## 11) Límites y siguientes pasos
-
-* **Sin efemérides**: el CSV no se genera aún a partir de TLEs; se asume dado.
-* **Capacidad continua**: el consumo es por-bundle; no se modela tráfico concurrente ni colas.
-* **Reconvergencia**: si un salto falla en ejecución, replanificar desde el último punto viable es futuro trabajo.
-
-**Roadmap**:
-
-* **Disjoint routing** (edge/node-disjoint) como modo adicional.
-* **Clases de servicio / TTL** y prioridades en coste.
-* **Backlog por nodo** y múltiples bundles.
-* **OWLT variable** y objetivos multi-criterio (ETA + energía).
+* `--dataset`, `--app-token`: identifican el dataset SODA y token.
+* `--src`, `--dst`, `--t0`, `--bytes`: definen la consulta.
+* `--k`: número de rutas alternativas.
+* `--cycles`, `--tick`: iteraciones y avance del reloj (para aprendizaje).
+* `--consume`: resta capacidad a los contactos usados.
+* `--learn-ewma --alpha A --lambda L`: penalización suave por enlace.
 
 ---
 
-## 12) Cómo defender el proyecto (sin código)
+## Estructura mínima
 
-* **Problema real**: en LEO los enlaces son efímeros; el ruteo debe ser **temporal y oportunista**.
-* **Solución**: modelar cada **contacto como evento** y encadenarlos con **causalidad temporal**, optimizando **ETA** con restricciones de **ventana** y **capacidad**.
-* **Valor**:
+* `src/api_main.c` → punto de entrada (API + aprendizaje ligero).
+* `src/nasa_api.c` / `include/nasa_api.h` → proveedor SODA + macro de cambio.
+* `src/cgr.c`, `src/heap.c`, `src/csv.c`, `src/leo_metrics.c`, `include/cgr.h` → núcleo CGR y utilidades.
+* `Makefile` → build mínimo (sin tests), enlaza `-lcurl -lm`.
 
-  * mejor planificación de tráfico satelital y entrega a GS,
-  * alternativas robustas (diversidad / consumo),
-  * simulación en vivo para **operaciones** y **what-if**.
-* **Extensibilidad**: entradas via CSV o API, periodificación orbital, y módulos listos para integrar datos reales.
+---
+
+## Límites conocidos
+
+* El aprendizaje es **ligero** (no simula colas ni *multi-commodity flow*).
+* La calidad depende de la **fidelidad del plan de contactos** publicado en el dataset.
+* Si el dataset no incluye `residual_bytes`, el consumo sólo afectará rutas subsecuentes dentro de la ejecución, no el dataset remoto.
+
+---
+
+## Por qué es defendible
+
+* Mantiene la **corrección temporal** del CGR, imprescindible en LEO.
+* Añade **dos heurísticas** simples pero efectivas que reducen la **miopía** del modelo estático con un **coste despreciable**.
+* Es **modular**: cambiar de API es un `#define`; ampliar el aprendizaje o desactivarlo es cuestión de flags.
+
+---
+
+## Créditos
+
+Desarrollado para EcoStation Europa — módulo de planificación y exploración de rutas CGR sobre datos públicos. Este README explica **arquitectura, flujo y ventajas** sin entrar en detalles de implementación línea a línea.
 

@@ -1,4 +1,3 @@
-// src/cgr_live.c — live con autoperiodo, API SODA y generador sintético (owlt + setup_s)
 
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>

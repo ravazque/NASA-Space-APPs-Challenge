@@ -1,4 +1,4 @@
-// src/leo_metrics.c — Implementación de métricas LEO
+
 #include <math.h>
 #include "leo_metrics.h"
 
