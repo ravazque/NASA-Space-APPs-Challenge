@@ -1,0 +1,1537 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CGR Enhanced v2.0 - Planificación Avanzada LEO</title>
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; overflow: hidden; background: #0a0e27; }
+        #cesiumContainer { width: 100vw; height: 100vh; }
+        
+        .panel {
+            position: absolute;
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.95) 100%);
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 1px rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px) saturate(180%);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+        }
+        
+        #leftPanel {
+            top: 20px; left: 20px; width: 420px;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+        }
+        
+        #rightPanel {
+            top: 20px; right: 20px; width: 480px;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+        }
+        
+        #bottomPanel {
+            bottom: 20px; left: 50%;
+            transform: translateX(-50%);
+            width: 900px;
+            transition: all 0.3s ease;
+        }
+        
+        #bottomPanel.collapsed {
+            max-height: 60px;
+        }
+        
+        #bottomPanel:not(.collapsed) {
+            max-height: 280px;
+        }
+        
+        .toggle-header {
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .toggle-icon {
+            transition: transform 0.3s ease;
+        }
+        
+        .toggle-icon.collapsed {
+            transform: rotate(-90deg);
+        }
+        
+        .header {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(99, 102, 241, 0.3);
+        }
+        
+        h2 {
+            font-size: 22px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }
+        
+        .subtitle {
+            font-size: 12px;
+            color: #94a3b8;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+        
+        h3 {
+            margin: 25px 0 15px 0;
+            font-size: 15px;
+            color: #cbd5e1;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+            border-left: 3px solid #6366f1;
+            padding-left: 10px;
+        }
+        
+        .section {
+            background: rgba(30, 41, 59, 0.4);
+            padding: 16px;
+            border-radius: 10px;
+            margin-bottom: 16px;
+            border: 1px solid rgba(100, 116, 139, 0.15);
+            transition: all 0.3s ease;
+        }
+        
+        .section:hover {
+            background: rgba(30, 41, 59, 0.6);
+            border-color: rgba(99, 102, 241, 0.3);
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 10px;
+            font-size: 13px;
+            color: #cbd5e1;
+            font-weight: 500;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: linear-gradient(to right, #6366f1 0%, #6366f1 var(--value), rgba(148, 163, 184, 0.2) var(--value), rgba(148, 163, 184, 0.2) 100%);
+            outline: none;
+            margin: 10px 0;
+            -webkit-appearance: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.5);
+            transition: transform 0.2s;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+        
+        input[type="number"], select {
+            width: 100%;
+            padding: 12px;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(100, 116, 139, 0.3);
+            border-radius: 8px;
+            color: #e2e8f0;
+            font-size: 14px;
+            font-family: 'SF Mono', 'Menlo', monospace;
+            transition: all 0.3s;
+        }
+        
+        input[type="number"]:focus, select:focus {
+            outline: none;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        }
+        
+        button {
+            width: 100%;
+            padding: 14px;
+            margin: 8px 0;
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+            box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        button::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: linear-gradient(135deg, transparent 0%, rgba(255, 255, 255, 0.1) 100%);
+            transform: translateX(-100%);
+            transition: transform 0.3s;
+        }
+        
+        button:hover::before {
+            transform: translateX(0);
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(99, 102, 241, 0.6);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        button.secondary {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(51, 65, 85, 0.8) 100%);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+        }
+        
+        .value-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            padding: 4px 12px;
+            border-radius: 8px;
+            margin-left: 10px;
+            font-weight: 700;
+            font-size: 13px;
+            font-family: 'SF Mono', 'Menlo', monospace;
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+        }
+        
+        .metric-card {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(51, 65, 85, 0.7) 100%);
+            padding: 16px 18px;
+            border-radius: 12px;
+            margin: 12px 0;
+            border-left: 4px solid #6366f1;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s;
+        }
+        
+        .metric-card:hover {
+            transform: translateX(5px);
+            border-left-color: #a855f7;
+        }
+        
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 8px 0;
+        }
+        
+        .metric-label {
+            color: #94a3b8;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        
+        .metric-value {
+            color: #e2e8f0;
+            font-weight: 700;
+            font-size: 17px;
+            font-family: 'SF Mono', 'Menlo', monospace;
+        }
+        
+        .metric-value.highlight {
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-size: 20px;
+        }
+        
+        .algo-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin: 3px;
+        }
+        
+        .algo-dijkstra { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid #ef4444; }
+        .algo-cgr-classic { background: rgba(251, 191, 36, 0.2); color: #fcd34d; border: 1px solid #f59e0b; }
+        .algo-cgr-enhanced { background: rgba(34, 197, 94, 0.2); color: #86efac; border: 1px solid #22c55e; }
+        .algo-cgr-ml { background: rgba(139, 92, 246, 0.2); color: #c4b5fd; border: 1px solid #8b5cf6; }
+        
+        .contact-window {
+            background: rgba(30, 41, 59, 0.6);
+            padding: 14px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border-left: 3px solid #10b981;
+            font-size: 12px;
+            transition: all 0.3s;
+        }
+        
+        .contact-window:hover {
+            background: rgba(30, 41, 59, 0.8);
+            transform: translateX(3px);
+        }
+        
+        .contact-window.active {
+            border-left-color: #22c55e;
+            background: rgba(34, 197, 94, 0.15);
+            box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+        }
+        
+        .contact-window.expired {
+            border-left-color: #ef4444;
+            opacity: 0.5;
+        }
+        
+        .contact-info {
+            display: flex;
+            justify-content: space-between;
+            margin: 6px 0;
+        }
+        
+        .contact-label {
+            color: #94a3b8;
+            font-weight: 500;
+        }
+        
+        .contact-value {
+            color: #e2e8f0;
+            font-weight: 600;
+            font-family: 'SF Mono', 'Menlo', monospace;
+        }
+        
+        .route-step {
+            background: rgba(99, 102, 241, 0.15);
+            padding: 12px;
+            border-radius: 8px;
+            margin: 8px 0;
+            border-left: 3px solid #6366f1;
+            font-size: 13px;
+        }
+        
+        .route-hop {
+            display: inline-block;
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            color: white;
+            padding: 5px 12px;
+            border-radius: 6px;
+            margin: 3px;
+            font-weight: 700;
+            font-size: 12px;
+            font-family: 'SF Mono', 'Menlo', monospace;
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+        }
+        
+        .improvement-badge {
+            display: inline-block;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 14px;
+            background: linear-gradient(135deg, #22c55e 0%, #10b981 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
+            margin: 5px 0;
+        }
+        
+        .improvement-negative {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 10px;
+            animation: pulse 2s ease-in-out infinite;
+            box-shadow: 0 0 10px currentColor;
+        }
+        
+        .status-indicator.active { background: #22c55e; color: #22c55e; }
+        .status-indicator.computing { background: #f59e0b; color: #f59e0b; }
+        .status-indicator.error { background: #ef4444; color: #ef4444; }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+        }
+        
+        .algo-info {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            padding: 14px;
+            border-radius: 10px;
+            margin: 12px 0;
+            font-size: 12px;
+            line-height: 1.7;
+        }
+        
+        .feature-tag {
+            display: inline-block;
+            background: rgba(168, 85, 247, 0.2);
+            color: #c4b5fd;
+            padding: 4px 10px;
+            border-radius: 5px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin: 2px;
+            border: 1px solid #a855f7;
+        }
+        
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin: 15px 0;
+        }
+        
+        .comparison-item {
+            background: rgba(30, 41, 59, 0.5);
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(100, 116, 139, 0.2);
+        }
+        
+        .comparison-label {
+            font-size: 11px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+        
+        .comparison-value {
+            font-size: 18px;
+            font-weight: 700;
+            font-family: 'SF Mono', 'Menlo', monospace;
+        }
+        
+        .legend-box {
+            background: rgba(30, 41, 59, 0.5);
+            padding: 14px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border: 1px solid rgba(100, 116, 139, 0.2);
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+            font-size: 12px;
+        }
+        
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            margin-right: 10px;
+            border: 2px solid white;
+        }
+        
+        .legend-color.source { background: #22c55e; }
+        .legend-color.destination { background: #ef4444; }
+        .legend-color.normal { background: #06b6d4; }
+        
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 5px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            border-radius: 5px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #a855f7 0%, #6366f1 100%);
+        }
+        
+        .badge-new {
+            background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);
+            color: white;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
+            margin-left: 8px;
+            animation: blink 2s ease-in-out infinite;
+        }
+        
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        
+        .collapsible-content {
+            overflow-y: auto;
+            transition: max-height 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div id="cesiumContainer"></div>
+    
+    <!-- Panel Izquierdo: Configuración -->
+    <div id="leftPanel" class="panel">
+        <div class="header">
+            <h2>⚙️ Configuración Avanzada</h2>
+            <div class="subtitle">CGR Enhanced v2.0 <span class="badge-new">NASA IMPROVED</span></div>
+        </div>
+        
+        <div class="section">
+            <label>Número de Satélites: <span class="value-badge" id="satCountDisplay">9</span></label>
+            <input type="range" id="satCount" min="9" max="36" value="9" step="9" style="--value: 0%">
+        </div>
+        
+        <div class="section">
+            <label>Altitud Orbital (km): <span class="value-badge" id="altDisplay">550</span></label>
+            <input type="range" id="altitude" min="400" max="1200" value="550" step="50" style="--value: 19%">
+        </div>
+        
+        <div class="section">
+            <label>Velocidad Simulación: <span class="value-badge" id="speedDisplay">60x</span></label>
+            <input type="range" id="simSpeed" min="10" max="200" value="60" step="10" style="--value: 26%">
+        </div>
+        
+        <h3>Algoritmo CGR <span class="badge-new">MEJORADO</span></h3>
+        
+        <div class="section">
+            <label>Modo de Ruteo:</label>
+            <select id="routingAlgorithm">
+                <option value="dijkstra">Dijkstra Clásico (Baseline)</option>
+                <option value="cgr-classic">CGR Clásico (Temporal)</option>
+                <option value="cgr-enhanced" selected>CGR Enhanced (Consume + EWMA)</option>
+                <option value="cgr-ml">CGR ML-Predictivo (Experimental)</option>
+            </select>
+        </div>
+        
+        <div class="algo-info">
+            <strong>🔬 CGR Enhanced:</strong> Implementa las mejoras del repositorio NASA:
+            <div style="margin-top:8px;">
+                <span class="feature-tag">Consumo de capacidad</span>
+                <span class="feature-tag">EWMA Penalty</span>
+                <span class="feature-tag">Pre-check viable</span>
+                <span class="feature-tag">K-Yen deduplicado</span>
+            </div>
+        </div>
+        
+        <div class="section">
+            <label>Horizonte de Planificación (min):</label>
+            <input type="number" id="planningHorizon" value="30" min="5" max="120" step="5">
+        </div>
+        
+        <div class="section">
+            <label>Tamaño Bundle (MB):</label>
+            <input type="number" id="bundleSize" value="50" min="1" max="500" step="10">
+        </div>
+        
+        <div class="section">
+            <label>
+                <input type="checkbox" id="enableConsume" checked>
+                Consumir Capacidad Residual
+            </label>
+            <label>
+                <input type="checkbox" id="enableEWMA" checked>
+                Aprendizaje EWMA (α=0.2, λ=1.0)
+            </label>
+            <label>
+                <input type="checkbox" id="enablePrecheck" checked>
+                Pre-check de Viabilidad (Optimización)
+            </label>
+        </div>
+        
+        <h3>Rutas Alternativas</h3>
+        
+        <div class="section">
+            <label>K Rutas (Yen-lite): <span class="value-badge" id="kDisplay">3</span></label>
+            <input type="range" id="kRoutes" min="1" max="10" value="3" step="1" style="--value: 22%">
+        </div>
+        
+        <!-- Leyenda de Colores -->
+        <h3>Leyenda de Satélites</h3>
+        <div class="legend-box">
+            <div class="legend-item">
+                <div class="legend-color source"></div>
+                <span><strong>Verde:</strong> Satélite Origen (fuente de datos)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color destination"></div>
+                <span><strong>Rojo:</strong> Satélite Destino (receptor final)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color normal"></div>
+                <span><strong>Cyan:</strong> Satélites intermedios en la red</span>
+            </div>
+        </div>
+        
+        <button onclick="replanRoute()">🔄 Recalcular Ruta Óptima</button>
+        <button onclick="runComparison()" class="secondary">📊 Comparar Algoritmos</button>
+        <button onclick="toggleAnimation()" class="secondary">⏯️ Play/Pause</button>
+        <button onclick="resetView()" class="secondary">🎯 Resetear Vista</button>
+    </div>
+    
+    <!-- Panel Derecho: Métricas -->
+    <div id="rightPanel" class="panel">
+        <div class="header">
+            <h2>📊 Métricas en Tiempo Real</h2>
+            <div class="subtitle">Rendimiento del Sistema</div>
+        </div>
+        
+        <div class="metric-card">
+            <div class="status-indicator active"></div>
+            <strong>Estado:</strong> <span id="systemStatus">Operativo - CGR Enhanced Activo</span>
+        </div>
+        
+        <div class="metric-card">
+            <div class="metric-row">
+                <span class="metric-label">Ventanas Activas:</span>
+                <span class="metric-value highlight" id="activeContacts">0</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Contactos en Horizonte:</span>
+                <span class="metric-value" id="futureContacts">0</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Capacidad Residual Total:</span>
+                <span class="metric-value" id="totalCapacity">0 GB</span>
+            </div>
+        </div>
+        
+        <h3>Ruta Actual (CGR Enhanced)</h3>
+        
+        <div class="metric-card">
+            <div class="metric-row">
+                <span class="metric-label">ETA:</span>
+                <span class="metric-value highlight" id="routeETA">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Latencia E2E:</span>
+                <span class="metric-value" id="routeLatency">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Saltos (Hops):</span>
+                <span class="metric-value" id="routeHops">0</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Throughput Mínimo:</span>
+                <span class="metric-value" id="routeThroughput">-</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Confiabilidad:</span>
+                <span class="metric-value" id="routeReliability">-</span>
+            </div>
+        </div>
+        
+        <div id="routeVisualization"></div>
+        
+        <h3>Comparativa vs. Baseline</h3>
+        
+        <div class="comparison-grid">
+            <div class="comparison-item">
+                <div class="comparison-label">Dijkstra Clásico</div>
+                <div class="comparison-value" style="color: #fca5a5;" id="dijkstraMetric">-</div>
+            </div>
+            <div class="comparison-item">
+                <div class="comparison-label">CGR Enhanced</div>
+                <div class="comparison-value" style="color: #86efac;" id="cgrEnhancedMetric">-</div>
+            </div>
+        </div>
+        
+        <div id="improvementDisplay"></div>
+        
+        <h3>Rutas Alternativas K-Yen</h3>
+        <div id="alternativeRoutes" style="max-height: 180px; overflow-y: auto;">
+            <!-- Se llenará dinámicamente -->
+        </div>
+    </div>
+    
+    <!-- Panel Inferior: Ventanas de Contacto (Desplegable) -->
+    <div id="bottomPanel" class="panel collapsed">
+        <div class="header toggle-header" onclick="toggleBottomPanel()">
+            <div>
+                <h2>📅 Ventanas de Contacto Planificadas</h2>
+                <div class="subtitle">Grafo Temporal de Contactos</div>
+            </div>
+            <span class="toggle-icon collapsed">▼</span>
+        </div>
+        <div class="collapsible-content" id="contactWindowsContent" style="max-height: 0; overflow: hidden;">
+            <div id="contactWindows" style="max-height: 200px; overflow-y: auto;"></div>
+        </div>
+    </div>
+
+    <script>
+        Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5N2UyMjcwOS00MDY1LTQxYjEtYjZjMy00YTU0ZTg1YmJhMzEiLCJpZCI6ODAzMDYsImlhdCI6MTY0Mjc0ODI2MX0.dkwAL1CcljUV7NA7fDbhXXnmyZQU_c-G5zRx8PtEcxE';
+        
+        const viewer = new Cesium.Viewer('cesiumContainer', {
+            imageryProvider: new Cesium.TileMapServiceImageryProvider({
+                url: Cesium.buildModuleUrl('Assets/Textures/NaturalEarthII')
+            }),
+            baseLayerPicker: false,
+            geocoder: false,
+            homeButton: false,
+            sceneModePicker: false,
+            timeline: false,
+            animation: false,
+            navigationHelpButton: false,
+            fullscreenButton: false
+        });
+
+        // Mejorar la apariencia de la Tierra
+        viewer.scene.globe.enableLighting = true;
+        viewer.scene.globe.atmosphereLightIntensity = 3.0;
+        viewer.scene.globe.showGroundAtmosphere = true;
+
+        const EARTH_RADIUS = 6371000;
+        let satellites = [];
+        let contactGraph = [];
+        let currentRoute = null;
+        let sourceNode = null;
+        let destNode = null;
+        let simulationTime = 0;
+        let linkEntities = [];
+        let routeEntities = [];
+        let edgeStates = [];
+        
+        let config = {
+            satCount: 9,  // Cambiado a 9 por defecto
+            altitude: 550000,
+            simSpeed: 60,
+            planningHorizon: 30 * 60,
+            bundleSize: 50 * 1e6,
+            routingAlgorithm: 'cgr-enhanced',
+            enableConsume: true,
+            enableEWMA: true,
+            enablePrecheck: true,
+            kRoutes: 3,
+            alpha: 0.2,
+            lambda: 1.0
+        };
+
+        // Función para desplegar/colapsar el panel inferior
+        function toggleBottomPanel() {
+            const panel = document.getElementById('bottomPanel');
+            const content = document.getElementById('contactWindowsContent');
+            const icon = document.querySelector('.toggle-icon');
+            
+            if (panel.classList.contains('collapsed')) {
+                panel.classList.remove('collapsed');
+                content.style.maxHeight = '200px';
+                icon.classList.remove('collapsed');
+            } else {
+                panel.classList.add('collapsed');
+                content.style.maxHeight = '0';
+                icon.classList.add('collapsed');
+            }
+        }
+
+        // ============ MEJORA 1: Pre-check de Viabilidad ============
+        function contactIsViable(contact, t_arrival, bundle_bytes) {
+            if (t_arrival > contact.t_end) return false;
+            
+            const start_tx = Math.max(t_arrival, contact.t_start);
+            const window = contact.t_end - start_tx - contact.setup_s;
+            if (window <= 0) return false;
+            
+            const rate = Math.max(contact.rate_bps, 1.0);
+            const cap_window = window * rate / 8;
+            const cap_actual = Math.min(contact.residual_bytes, cap_window);
+            
+            if (cap_actual < bundle_bytes) return false;
+            
+            const tx_time = bundle_bytes / (rate / 8);
+            const finish = start_tx + contact.setup_s + tx_time;
+            if (finish > contact.t_end) return false;
+            
+            return true;
+        }
+
+        // ============ MEJORA 2: Cálculo de ETA con Espera Temporal ============
+        function calculateETA(contact, t_in, bundle_bytes) {
+            if (!contactIsViable(contact, t_in, bundle_bytes)) return Infinity;
+            
+            const start_tx = Math.max(t_in, contact.t_start);
+            const wait_time = Math.max(0, contact.t_start - t_in);
+            
+            const rate = Math.max(contact.rate_bps, 1.0) / 8;
+            const tx_time = bundle_bytes / rate;
+            
+            const finish = start_tx + contact.setup_s + tx_time;
+            const eta = finish + contact.owlt;
+            
+            return eta;
+        }
+
+        // ============ MEJORA 3: Penalización EWMA ============
+        function applyEWMA(contact_id, wait_time) {
+            if (!config.enableEWMA) return;
+            
+            const idx = contactGraph.findIndex(c => c.id === contact_id);
+            if (idx === -1) return;
+            
+            if (!edgeStates[idx]) {
+                edgeStates[idx] = { penalty_s: 0, usage_count: 0 };
+            }
+            
+            edgeStates[idx].penalty_s = (1 - config.alpha) * edgeStates[idx].penalty_s + 
+                                        config.alpha * wait_time;
+            edgeStates[idx].usage_count++;
+        }
+
+        // ============ MEJORA 4: Consumo de Capacidad ============
+        function consumeCapacity(route, bundle_bytes) {
+            if (!config.enableConsume || !route || !route.found) return;
+            
+            route.contact_ids.forEach(contact_id => {
+                const contact = contactGraph.find(c => c.id === contact_id);
+                if (contact) {
+                    const before = contact.residual_bytes;
+                    contact.residual_bytes = Math.max(0, contact.residual_bytes - bundle_bytes);
+                    console.log(`Consume: Contact ${contact_id} | ${(before/1e6).toFixed(1)} → ${(contact.residual_bytes/1e6).toFixed(1)} MB`);
+                }
+            });
+        }
+
+        // ============ ALGORITMO CGR ENHANCED ============
+        function cgrEnhancedSearch(src, dst, t0, bundle_bytes) {
+            const distances = {};
+            const arrivalTimes = {};
+            const previous = {};
+            const unvisited = new Set();
+            
+            contactGraph.forEach((c, idx) => {
+                distances[idx] = Infinity;
+                arrivalTimes[idx] = t0;
+                previous[idx] = null;
+                unvisited.add(idx);
+            });
+            
+            contactGraph.forEach((c, idx) => {
+                if (c.from !== src) return;
+                
+                if (config.enablePrecheck && !contactIsViable(c, t0, bundle_bytes)) return;
+                
+                let effective_setup = c.setup_s;
+                if (config.enableEWMA && edgeStates[idx]) {
+                    effective_setup += config.lambda * edgeStates[idx].penalty_s;
+                }
+                
+                const eta = calculateETA({...c, setup_s: effective_setup}, t0, bundle_bytes);
+                if (eta === Infinity) return;
+                
+                distances[idx] = eta - t0;
+                arrivalTimes[idx] = eta;
+            });
+            
+            let best_end = null;
+            let best_eta = Infinity;
+            
+            while (unvisited.size > 0) {
+                let current_idx = null;
+                let min_dist = Infinity;
+                
+                unvisited.forEach(idx => {
+                    if (distances[idx] < min_dist) {
+                        min_dist = distances[idx];
+                        current_idx = idx;
+                    }
+                });
+                
+                if (current_idx === null || min_dist === Infinity) break;
+                
+                unvisited.delete(current_idx);
+                
+                const current = contactGraph[current_idx];
+                const current_arrival = arrivalTimes[current_idx];
+                
+                if (current.to === dst) {
+                    best_end = current_idx;
+                    best_eta = current_arrival;
+                    break;
+                }
+                
+                contactGraph.forEach((neighbor, nj) => {
+                    if (!unvisited.has(nj)) return;
+                    if (neighbor.from !== current.to) return;
+                    
+                    if (config.enablePrecheck && !contactIsViable(neighbor, current_arrival, bundle_bytes)) return;
+                    
+                    let effective_setup = neighbor.setup_s;
+                    if (config.enableEWMA && edgeStates[nj]) {
+                        effective_setup += config.lambda * edgeStates[nj].penalty_s;
+                    }
+                    
+                    const eta_n = calculateETA({...neighbor, setup_s: effective_setup}, current_arrival, bundle_bytes);
+                    if (eta_n === Infinity) return;
+                    
+                    const new_dist = eta_n - t0;
+                    
+                    if (new_dist < distances[nj]) {
+                        distances[nj] = new_dist;
+                        arrivalTimes[nj] = eta_n;
+                        previous[nj] = current_idx;
+                    }
+                });
+            }
+            
+            if (best_end === null) {
+                return { found: false, eta: Infinity, latency: Infinity, hops: 0, contact_ids: [] };
+            }
+            
+            const path = [];
+            let cur = best_end;
+            while (cur !== null) {
+                path.unshift(contactGraph[cur].id);
+                cur = previous[cur];
+            }
+            
+            return {
+                found: true,
+                eta: best_eta,
+                latency: best_eta - t0,
+                hops: path.length,
+                contact_ids: path
+            };
+        }
+
+        // ============ ALGORITMO DIJKSTRA CLÁSICO ============
+        function dijkstraClassic(src, dst, t0, bundle_bytes) {
+            const distances = {};
+            const previous = {};
+            const unvisited = new Set();
+            
+            satellites.forEach(sat => {
+                distances[sat.id] = Infinity;
+                previous[sat.id] = null;
+                unvisited.add(sat.id);
+            });
+            
+            distances[src] = 0;
+            
+            while (unvisited.size > 0) {
+                let current = null;
+                let min_dist = Infinity;
+                
+                unvisited.forEach(id => {
+                    if (distances[id] < min_dist) {
+                        min_dist = distances[id];
+                        current = id;
+                    }
+                });
+                
+                if (current === null || current === dst) break;
+                
+                unvisited.delete(current);
+                
+                contactGraph.forEach(c => {
+                    if (c.from !== current) return;
+                    
+                    const cost = c.owlt + c.setup_s;
+                    const alt = distances[current] + cost;
+                    
+                    if (alt < distances[c.to]) {
+                        distances[c.to] = alt;
+                        previous[c.to] = current;
+                    }
+                });
+            }
+            
+            if (distances[dst] === Infinity) {
+                return { found: false, eta: Infinity, latency: Infinity, hops: 0, contact_ids: [] };
+            }
+            
+            const path = [];
+            let cur = dst;
+            while (previous[cur] !== null) {
+                path.unshift(cur);
+                cur = previous[cur];
+            }
+            
+            return {
+                found: true,
+                eta: t0 + distances[dst],
+                latency: distances[dst],
+                hops: path.length,
+                contact_ids: path
+            };
+        }
+
+        // ============ K RUTAS YEN-LITE ============
+        function kYenRoutes(src, dst, t0, bundle_bytes, k) {
+            const routes = [];
+            
+            const base = cgrEnhancedSearch(src, dst, t0, bundle_bytes);
+            if (base.found) routes.push(base);
+            
+            for (let i = 1; i < k && routes.length < k; i++) {
+                let best_alt = null;
+                
+                routes.forEach(ref_route => {
+                    for (let spur = 0; spur < ref_route.hops; spur++) {
+                        const banned_id = ref_route.contact_ids[spur];
+                        const temp_graph = contactGraph.filter(c => c.id !== banned_id);
+                        
+                        const old_graph = contactGraph;
+                        contactGraph = temp_graph;
+                        const alt = cgrEnhancedSearch(src, dst, t0, bundle_bytes);
+                        contactGraph = old_graph;
+                        
+                        if (!alt.found) continue;
+                        
+                        const is_dup = routes.some(r => 
+                            r.hops === alt.hops && 
+                            r.contact_ids.every((id, j) => id === alt.contact_ids[j])
+                        );
+                        
+                        if (is_dup) continue;
+                        
+                        if (!best_alt || alt.eta < best_alt.eta) {
+                            best_alt = alt;
+                        }
+                    }
+                });
+                
+                if (best_alt) routes.push(best_alt);
+                else break;
+            }
+            
+            return routes;
+        }
+
+        // ============ CREACIÓN DE CONSTELACIÓN ============
+        function createConstellation() {
+            satellites.forEach(sat => viewer.entities.remove(sat.entity));
+            linkEntities.forEach(link => viewer.entities.remove(link));
+            routeEntities.forEach(route => viewer.entities.remove(route));
+            
+            satellites = [];
+            linkEntities = [];
+            routeEntities = [];
+            contactGraph = [];
+            edgeStates = [];
+
+            const numPlanes = 3;
+            const satsPerPlane = config.satCount / numPlanes;
+            const inclination = 53;
+
+            for (let plane = 0; plane < numPlanes; plane++) {
+                const raan = (plane * 360) / numPlanes;
+                
+                for (let sat = 0; sat < satsPerPlane; sat++) {
+                    const meanAnomalyStart = (sat * 360) / satsPerPlane;
+                    
+                    const satEntity = viewer.entities.add({
+                        name: `SAT-${plane * satsPerPlane + sat}`,
+                        position: new Cesium.CallbackProperty(() => {
+                            return getSatellitePosition(plane, sat, meanAnomalyStart, inclination, raan);
+                        }, false),
+                        point: {
+                            pixelSize: 10,
+                            color: Cesium.Color.CYAN,
+                            outlineColor: Cesium.Color.WHITE,
+                            outlineWidth: 2
+                        },
+                        label: {
+                            text: `S${plane * satsPerPlane + sat}`,
+                            font: '14px sans-serif',
+                            fillColor: Cesium.Color.WHITE,
+                            outlineColor: Cesium.Color.BLACK,
+                            outlineWidth: 2,
+                            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                            pixelOffset: new Cesium.Cartesian2(0, -15)
+                        }
+                    });
+
+                    satellites.push({
+                        id: plane * satsPerPlane + sat,
+                        entity: satEntity,
+                        plane: plane,
+                        index: sat,
+                        meanAnomalyStart: meanAnomalyStart,
+                        inclination: inclination,
+                        raan: raan
+                    });
+                }
+            }
+
+            sourceNode = satellites[Math.floor(Math.random() * satellites.length)];
+            destNode = satellites[Math.floor(Math.random() * satellites.length)];
+            
+            while (sourceNode.id === destNode.id) {
+                destNode = satellites[Math.floor(Math.random() * satellites.length)];
+            }
+            
+            sourceNode.entity.point.color = Cesium.Color.LIME;
+            sourceNode.entity.point.pixelSize = 14;
+            destNode.entity.point.color = Cesium.Color.RED;
+            destNode.entity.point.pixelSize = 14;
+
+            buildContactGraph();
+            replanRoute();
+        }
+
+        function getSatellitePosition(plane, sat, meanAnomalyStart, inclination, raan) {
+            const orbitalPeriod = 5760;
+            const meanMotion = (2 * Math.PI) / orbitalPeriod;
+            const meanAnomaly = meanAnomalyStart + (meanMotion * simulationTime * config.simSpeed * 180 / Math.PI);
+            
+            const a = EARTH_RADIUS + config.altitude;
+            const incRad = Cesium.Math.toRadians(inclination);
+            const raanRad = Cesium.Math.toRadians(raan);
+            const maRad = Cesium.Math.toRadians(meanAnomaly);
+
+            const x = a * (Math.cos(raanRad) * Math.cos(maRad) - Math.sin(raanRad) * Math.sin(maRad) * Math.cos(incRad));
+            const y = a * (Math.sin(raanRad) * Math.cos(maRad) + Math.cos(raanRad) * Math.sin(maRad) * Math.cos(incRad));
+            const z = a * Math.sin(maRad) * Math.sin(incRad);
+
+            return new Cesium.Cartesian3(x, y, z);
+        }
+
+        // ============ CONSTRUCCIÓN DEL GRAFO DE CONTACTOS ============
+        function buildContactGraph() {
+            contactGraph = [];
+            linkEntities.forEach(link => viewer.entities.remove(link));
+            linkEntities = [];
+
+            const currentTime = simulationTime;
+            const horizonEnd = currentTime + config.planningHorizon;
+
+            let contact_id = 0;
+
+            satellites.forEach((sat1, i) => {
+                satellites.forEach((sat2, j) => {
+                    if (i >= j) return;
+
+                    const windows = calculateContactWindows(sat1, sat2, currentTime, horizonEnd);
+                    
+                    windows.forEach(window => {
+                        const distance = window.distance;
+                        const isOptical = distance < 2500000;
+                        const bandwidth = isOptical ? 150e6 : 10e6;
+                        const latency = (distance / 299792458);
+                        const reliability = isOptical ? 0.95 : 0.85;
+                        const residual_bytes = (isOptical ? 500 : 100) * 1e6;
+
+                        contactGraph.push({
+                            id: contact_id++,
+                            from: sat1.id,
+                            to: sat2.id,
+                            t_start: window.start,
+                            t_end: window.end,
+                            distance: distance,
+                            type: isOptical ? 'optical' : 'rf',
+                            rate_bps: bandwidth,
+                            owlt: latency,
+                            setup_s: 0.1,
+                            residual_bytes: residual_bytes,
+                            reliability: reliability
+                        });
+
+                        // Visualizar enlaces activos
+                        if (window.start <= currentTime && window.end >= currentTime) {
+                            const color = isOptical ? 
+                                Cesium.Color.CYAN.withAlpha(0.5) :  // Aumentada opacidad
+                                Cesium.Color.ORANGE.withAlpha(0.4);  // Aumentada opacidad
+
+                            const link = viewer.entities.add({
+                                polyline: {
+                                    positions: new Cesium.CallbackProperty(() => {
+                                        const time = viewer.clock.currentTime || Cesium.JulianDate.now();
+                                        return [
+                                            sat1.entity.position.getValue(time),
+                                            sat2.entity.position.getValue(time)
+                                        ];
+                                    }, false),
+                                    width: isOptical ? 3 : 2,  // Aumentado grosor
+                                    material: color
+                                }
+                            });
+                            linkEntities.push(link);
+                        }
+                    });
+                });
+            });
+
+            updateContactList();
+            updateMetrics();
+        }
+
+        function calculateContactWindows(sat1, sat2, startTime, endTime) {
+            const windows = [];
+            const timeStep = 30;  // Reducido para más suavidad
+            const maxDistance = 3000000;
+
+            let inContact = false;
+            let windowStart = null;
+            let windowDistance = 0;
+
+            for (let t = startTime; t <= endTime; t += timeStep) {
+                const tempTime = t;
+                simulationTime = tempTime;
+                
+                const pos1 = getSatellitePosition(sat1.plane, sat1.index, sat1.meanAnomalyStart, sat1.inclination, sat1.raan);
+                const pos2 = getSatellitePosition(sat2.plane, sat2.index, sat2.meanAnomalyStart, sat2.inclination, sat2.raan);
+                
+                const distance = Cesium.Cartesian3.distance(pos1, pos2);
+
+                if (distance <= maxDistance && !inContact) {
+                    inContact = true;
+                    windowStart = t;
+                    windowDistance = distance;
+                } else if ((distance > maxDistance || t === endTime) && inContact) {
+                    inContact = false;
+                    windows.push({
+                        start: windowStart,
+                        end: t,
+                        distance: windowDistance
+                    });
+                }
+            }
+
+            simulationTime = startTime;
+            return windows;
+        }
+
+        // ============ REPLANIFICAR RUTA ============
+        function replanRoute() {
+            if (satellites.length < 2) return;
+
+            const algo = config.routingAlgorithm;
+            const t0 = simulationTime;
+            const bundle_bytes = config.bundleSize;
+
+            let route = null;
+
+            switch(algo) {
+                case 'dijkstra':
+                    route = dijkstraClassic(sourceNode.id, destNode.id, t0, bundle_bytes);
+                    break;
+                case 'cgr-classic':
+                case 'cgr-enhanced':
+                    route = cgrEnhancedSearch(sourceNode.id, destNode.id, t0, bundle_bytes);
+                    break;
+                case 'cgr-ml':
+                    route = cgrEnhancedSearch(sourceNode.id, destNode.id, t0, bundle_bytes);
+                    break;
+            }
+
+            if (route && route.found) {
+                currentRoute = route;
+                
+                if (config.enableEWMA && route.hops > 0) {
+                    const first_contact_id = route.contact_ids[0];
+                    const first_contact = contactGraph.find(c => c.id === first_contact_id);
+                    if (first_contact) {
+                        const wait_time = Math.max(0, first_contact.t_start - t0);
+                        applyEWMA(first_contact_id, wait_time);
+                    }
+                }
+                
+                consumeCapacity(route, bundle_bytes);
+                visualizeRoute(route);
+            }
+
+            updateMetrics();
+            displayAlternativeRoutes();
+        }
+
+        // ============ VISUALIZAR RUTA ============
+        function visualizeRoute(route) {
+            routeEntities.forEach(e => viewer.entities.remove(e));
+            routeEntities = [];
+
+            if (!route || !route.found || route.hops === 0) return;
+
+            for (let i = 0; i < route.contact_ids.length; i++) {
+                const contact_id = route.contact_ids[i];
+                const contact = contactGraph.find(c => c.id === contact_id);
+                if (!contact) continue;
+
+                const sat1 = satellites.find(s => s.id === contact.from);
+                const sat2 = satellites.find(s => s.id === contact.to);
+                if (!sat1 || !sat2) continue;
+
+                const routeEntity = viewer.entities.add({
+                    name: `ROUTE-${i}`,
+                    polyline: {
+                        positions: new Cesium.CallbackProperty(() => {
+                            const time = viewer.clock.currentTime || Cesium.JulianDate.now();
+                            return [
+                                sat1.entity.position.getValue(time),
+                                sat2.entity.position.getValue(time)
+                            ];
+                        }, false),
+                        width: 5,
+                        material: new Cesium.PolylineGlowMaterialProperty({
+                            glowPower: 0.4,
+                            color: Cesium.Color.LIME
+                        })
+                    }
+                });
+                routeEntities.push(routeEntity);
+            }
+        }
+
+        // ============ ACTUALIZAR MÉTRICAS ============
+        function updateMetrics() {
+            const activeLinks = contactGraph.filter(c => 
+                simulationTime >= c.t_start && simulationTime < c.t_end
+            ).length;
+            document.getElementById('activeContacts').textContent = activeLinks;
+
+            const futureLinks = contactGraph.filter(c => 
+                c.t_start > simulationTime && c.t_start < simulationTime + config.planningHorizon
+            ).length;
+            document.getElementById('futureContacts').textContent = futureLinks;
+
+            const totalCap = contactGraph.reduce((sum, c) => sum + c.residual_bytes, 0) / 1e9;
+            document.getElementById('totalCapacity').textContent = `${totalCap.toFixed(2)} GB`;
+
+            if (currentRoute && currentRoute.found) {
+                document.getElementById('routeETA').textContent = `${currentRoute.eta.toFixed(3)} s`;
+                document.getElementById('routeLatency').textContent = `${currentRoute.latency.toFixed(3)} s`;
+                document.getElementById('routeHops').textContent = currentRoute.hops;
+                
+                const minThroughput = Math.min(...currentRoute.contact_ids.map(id => {
+                    const c = contactGraph.find(c => c.id === id);
+                    return c ? c.rate_bps / 1e9 : 0;
+                }));
+                document.getElementById('routeThroughput').textContent = `${minThroughput.toFixed(1)} Gbps`;
+                
+                const reliability = currentRoute.contact_ids.reduce((prod, id) => {
+                    const c = contactGraph.find(c => c.id === id);
+                    return prod * (c ? c.reliability : 1);
+                }, 1);
+                document.getElementById('routeReliability').textContent = `${(reliability * 100).toFixed(1)}%`;
+            } else {
+                document.getElementById('routeETA').textContent = '-';
+                document.getElementById('routeLatency').textContent = '-';
+                document.getElementById('routeHops').textContent = '0';
+                document.getElementById('routeThroughput').textContent = '-';
+                document.getElementById('routeReliability').textContent = '-';
+            }
+        }
+
+        // ============ MOSTRAR RUTAS ALTERNATIVAS ============
+        function displayAlternativeRoutes() {
+            const container = document.getElementById('alternativeRoutes');
+            container.innerHTML = '';
+
+            const routes = kYenRoutes(sourceNode.id, destNode.id, simulationTime, config.bundleSize, config.kRoutes);
+
+            routes.forEach((route, idx) => {
+                const div = document.createElement('div');
+                div.className = 'route-step';
+                div.innerHTML = `
+                    <strong>Ruta #${idx + 1}</strong><br>
+                    ETA: ${route.eta.toFixed(3)} s | Latencia: ${route.latency.toFixed(3)} s | Hops: ${route.hops}<br>
+                    Path: ${route.contact_ids.map(id => `<span class="route-hop">${id}</span>`).join(' → ')}
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // ============ ACTUALIZAR LISTA DE CONTACTOS ============
+        function updateContactList() {
+            const container = document.getElementById('contactWindows');
+            container.innerHTML = '';
+
+            const relevantContacts = contactGraph
+                .filter(c => c.t_start < simulationTime + config.planningHorizon)
+                .sort((a, b) => a.t_start - b.t_start)
+                .slice(0, 12);
+
+            relevantContacts.forEach(contact => {
+                const isActive = simulationTime >= contact.t_start && simulationTime < contact.t_end;
+                const isExpired = simulationTime >= contact.t_end;
+
+                const div = document.createElement('div');
+                div.className = `contact-window ${isActive ? 'active' : ''} ${isExpired ? 'expired' : ''}`;
+                div.innerHTML = `
+                    <div class="contact-info">
+                        <span class="contact-label">Contact ${contact.id}:</span>
+                        <span class="contact-value">S${contact.from} → S${contact.to}</span>
+                    </div>
+                    <div class="contact-info">
+                        <span class="contact-label">Window:</span>
+                        <span class="contact-value">[${contact.t_start.toFixed(0)}s, ${contact.t_end.toFixed(0)}s]</span>
+                    </div>
+                    <div class="contact-info">
+                        <span class="contact-label">Type:</span>
+                        <span class="contact-value">${contact.type === 'optical' ? '🔵 Optical' : '🟠 RF'} | ${(contact.rate_bps / 1e6).toFixed(0)} Mbps</span>
+                    </div>
+                    <div class="contact-info">
+                        <span class="contact-label">Residual:</span>
+                        <span class="contact-value">${(contact.residual_bytes / 1e6).toFixed(1)} MB</span>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // ============ COMPARACIÓN DE ALGORITMOS ============
+        function runComparison() {
+            const t0 = simulationTime;
+            const bundle_bytes = config.bundleSize;
+
+            const dijkstra = dijkstraClassic(sourceNode.id, destNode.id, t0, bundle_bytes);
+            const cgr = cgrEnhancedSearch(sourceNode.id, destNode.id, t0, bundle_bytes);
+
+            document.getElementById('dijkstraMetric').textContent = dijkstra.found ? 
+                `${dijkstra.latency.toFixed(3)} s` : 'No route';
+            document.getElementById('cgrEnhancedMetric').textContent = cgr.found ? 
+                `${cgr.latency.toFixed(3)} s` : 'No route';
+
+            const improvement = document.getElementById('improvementDisplay');
+            if (dijkstra.found && cgr.found) {
+                const percent = ((dijkstra.latency - cgr.latency) / dijkstra.latency * 100);
+                const isPositive = percent > 0;
+                improvement.innerHTML = `
+                    <div class="improvement-badge ${isPositive ? '' : 'improvement-negative'}">
+                        ${isPositive ? '↓' : '↑'} ${Math.abs(percent).toFixed(1)}% ${isPositive ? 'Mejora' : 'Peor'}
+                    </div>
+                `;
+            }
+        }
+
+        // ============ EVENT LISTENERS ============
+        document.getElementById('satCount').addEventListener('input', (e) => {
+            config.satCount = parseInt(e.target.value);
+            document.getElementById('satCountDisplay').textContent = config.satCount;
+            e.target.style.setProperty('--value', `${((config.satCount - 9) / 27) * 100}%`);
+            createConstellation();
+        });
+
+        document.getElementById('altitude').addEventListener('input', (e) => {
+            config.altitude = parseInt(e.target.value) * 1000;
+            document.getElementById('altDisplay').textContent = e.target.value;
+            e.target.style.setProperty('--value', `${((parseInt(e.target.value) - 400) / 800) * 100}%`);
+            createConstellation();
+        });
+
+        document.getElementById('simSpeed').addEventListener('input', (e) => {
+            config.simSpeed = parseInt(e.target.value);
+            document.getElementById('speedDisplay').textContent = `${config.simSpeed}x`;
+            e.target.style.setProperty('--value', `${((config.simSpeed - 10) / 190) * 100}%`);
+            viewer.clock.multiplier = config.simSpeed;
+        });
+
+        document.getElementById('routingAlgorithm').addEventListener('change', (e) => {
+            config.routingAlgorithm = e.target.value;
+            replanRoute();
+        });
+
+        document.getElementById('planningHorizon').addEventListener('change', (e) => {
+            config.planningHorizon = parseInt(e.target.value) * 60;
+            buildContactGraph();
+        });
+
+        document.getElementById('bundleSize').addEventListener('change', (e) => {
+            config.bundleSize = parseInt(e.target.value) * 1e6;
+            replanRoute();
+        });
+
+        document.getElementById('enableConsume').addEventListener('change', (e) => {
+            config.enableConsume = e.target.checked;
+        });
+
+        document.getElementById('enableEWMA').addEventListener('change', (e) => {
+            config.enableEWMA = e.target.checked;
+        });
+
+        document.getElementById('enablePrecheck').addEventListener('change', (e) => {
+            config.enablePrecheck = e.target.checked;
+        });
+
+        document.getElementById('kRoutes').addEventListener('input', (e) => {
+            config.kRoutes = parseInt(e.target.value);
+            document.getElementById('kDisplay').textContent = config.kRoutes;
+            e.target.style.setProperty('--value', `${((config.kRoutes - 1) / 9) * 100}%`);
+        });
+
+        function toggleAnimation() {
+            viewer.clock.shouldAnimate = !viewer.clock.shouldAnimate;
+        }
+
+        function resetView() {
+            viewer.camera.flyHome(1);
+        }
+
+        // ============ ACTUALIZACIÓN CONTINUA (Más suave) ============
+        let lastUpdateTime = Date.now();
+        function smoothUpdate() {
+            const now = Date.now();
+            const deltaTime = (now - lastUpdateTime) / 1000; // segundos
+            lastUpdateTime = now;
+            
+            if (viewer.clock.shouldAnimate) {
+                simulationTime += deltaTime * config.simSpeed;
+                
+                // Actualizar métricas cada segundo (no en cada frame)
+                if (Math.floor(simulationTime) % 1 === 0) {
+                    updateMetrics();
+                }
+                
+                // Reconstruir grafo cada 10 segundos
+                if (Math.floor(simulationTime) % 10 === 0) {
+                    buildContactGraph();
+                }
+            }
+            
+            requestAnimationFrame(smoothUpdate);
+        }
+        
+        // Iniciar el loop de actualización suave
+        smoothUpdate();
+
+        // ============ INICIALIZACIÓN ============
+        viewer.clock.multiplier = config.simSpeed;
+        viewer.clock.shouldAnimate = true;
+        
+        createConstellation();
+        
+        viewer.camera.flyTo({
+            destination: Cesium.Cartesian3.fromDegrees(0, 30, 15000000),
+            orientation: {
+                heading: 0,
+                pitch: Cesium.Math.toRadians(-45),
+                roll: 0
+            },
+            duration: 2
+        });
+    </script>
+</body>
+</html>
