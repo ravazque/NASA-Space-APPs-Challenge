@@ -1,0 +1,5 @@
+Resumen:
+  Total rutas validadas: 324
+  ✅ OK: 0
+  ❌ KO: 324
+Detalles: /home/ravazque/Desktop/NASA/test/out/results.csv

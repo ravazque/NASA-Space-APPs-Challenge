@@ -1,3 +1,4 @@
+
 // src/cgr.c — CGR: Dijkstra temporal (k=1), K por consumo y K Yen-lite (con filtros) — C puro
 #include <stdlib.h>
 #include <string.h>
