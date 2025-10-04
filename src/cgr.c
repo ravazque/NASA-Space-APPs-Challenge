@@ -8,6 +8,7 @@
 #include <limits.h>
 #include "cgr.h"
 #include "heap.h"
+#include "leo_metrics.h"
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Constantes y macros
@@ -26,23 +27,6 @@
 static inline int max3(int a, int b, int c) {
     int m = a > b ? a : b;
     return m > c ? m : c;
-}
-
-#include "leo_metrics.h"
-
-// ✅ NUEVA: Métrica compuesta que considera LEO
-static double eta_contact_leo(const Contact *c, double t_in, double bundle_bytes, 
-                              double expiry_abs, int prefer_isl) {
-    double base_eta = eta_contact(c, t_in, bundle_bytes, expiry_abs);
-    
-    if (base_eta == DBL_MAX || !prefer_isl) return base_eta;
-    
-    // Aplicar penalización por tipo de enlace
-    LeoMetrics m = compute_leo_metrics(c, t_in);
-    double penalty = link_type_penalty(m.link_type);
-    
-    // Añadir penalización temporal (favorece ISL sin cambiar ETA real)
-    return base_eta + penalty;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -219,6 +203,21 @@ static double eta_contact(const Contact *c, double t_in, double bundle_bytes, do
     if (expiry_abs > 0.0 && eta > expiry_abs + EPS_TIME) return DBL_MAX;
     
     return eta;
+}
+
+// ✅ NUEVA: Métrica compuesta que considera LEO (DESPUÉS de eta_contact)
+static double eta_contact_leo(const Contact *c, double t_in, double bundle_bytes, 
+                              double expiry_abs, int prefer_isl) {
+    double base_eta = eta_contact(c, t_in, bundle_bytes, expiry_abs);
+    
+    if (base_eta == DBL_MAX || !prefer_isl) return base_eta;
+    
+    // Aplicar penalización por tipo de enlace
+    LeoMetrics m = compute_leo_metrics(c, t_in);
+    double penalty = link_type_penalty(m.link_type);
+    
+    // Añadir penalización temporal (favorece ISL sin cambiar ETA real)
+    return base_eta + penalty;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -477,7 +476,6 @@ static void consume_capacity(Contact *C, int N, const Route *route, const CgrPar
         for (int i = 0; i < N; i++) {
             if (C[i].id == id) {
                 double bytes = P->bundle_bytes;
-                double prev = C[i].residual_bytes;
                 
                 if (C[i].residual_bytes >= bytes) {
                     C[i].residual_bytes -= bytes;
@@ -486,7 +484,7 @@ static void consume_capacity(Contact *C, int N, const Route *route, const CgrPar
                 }
                 
                 DEBUG_PRINT("  Contacto %d: %.0f → %.0f bytes\n", 
-                           id, prev, C[i].residual_bytes);
+                           id, C[i].residual_bytes + bytes, C[i].residual_bytes);
                 break;
             }
         }

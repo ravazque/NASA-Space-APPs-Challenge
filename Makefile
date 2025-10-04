@@ -117,7 +117,23 @@ analyze: $(BIN)
 	@echo ""
 	@echo -e "$(GREEN)Análisis guardado en test/out/analysis.txt$(RESET)"
 
-.PHONY: test-all visualize analyze
+# ─────────────────────────────────────────────────────────────────────────────
+# CGR Live - Simulación continua
+# ─────────────────────────────────────────────────────────────────────────────
+
+cgr_live: $(OBJ_DIR)/cgr.o $(OBJ_DIR)/csv.o $(OBJ_DIR)/heap.o $(OBJ_DIR)/leo_metrics.o $(OBJ_DIR)/nasa_api.o src/cgr_live.c | $(OBJ_DIR)
+	@echo -e "$(BLUE)→ Compilando CGR Live$(RESET)"
+	$(CC) $(CFLAGS) $(INCLUDE) src/cgr_live.c $(OBJ_DIR)/*.o -o cgr_live
+
+$(OBJ_DIR)/nasa_api.o: src/nasa_api.c | $(OBJ_DIR)
+	@echo -e "$(BLUE)→ Compilando NASA API module$(RESET)"
+	$(CC) $(CFLAGS) $(INCLUDE) -c src/nasa_api.c -o $(OBJ_DIR)/nasa_api.o
+
+live: cgr_live
+	@echo -e "$(YELLOW)Iniciando simulación en tiempo real...$(RESET)"
+	./cgr_live
+
+.PHONY: live cgr_live test-all visualize analyze
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Ayuda

@@ -20,6 +20,7 @@ LinkType classify_link_type(int from, int to) {
 // Calcular métricas LEO
 LeoMetrics compute_leo_metrics(const Contact *c, double t_arrival) {
     LeoMetrics m;
+    (void)t_arrival; // Marcado como intencional para uso futuro
     
     m.link_type = classify_link_type(c->from, c->to);
     
@@ -51,7 +52,6 @@ LeoMetrics compute_leo_metrics(const Contact *c, double t_arrival) {
     // Ángulo de elevación (solo para enlaces GS)
     if (m.link_type != LINK_ISL) {
         // Simplificado: basado en OWLT (mayor OWLT = menor elevación)
-        double dist_km = c->owlt * 299792.458; // c * owlt
         double earth_radius = 6371.0;
         double sat_altitude = 550.0; // LEO típico
         m.elevation_angle_deg = asin(earth_radius / (earth_radius + sat_altitude)) * 180.0 / PI;
