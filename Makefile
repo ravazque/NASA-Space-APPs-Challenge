@@ -99,6 +99,27 @@ bench: $(BIN)
 	@$(TIME) ./$(BIN) --contacts data/contacts.csv --src 100 --dst 200 --t0 0 --bytes 5e7 --k-yen 10 >/dev/null
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Testing avanzado
+# ─────────────────────────────────────────────────────────────────────────────
+
+test-all: $(BIN)
+	@echo -e "$(BLUE)→ [TEST-ALL] Suite completa$(RESET)"
+	@bash test/test_all.sh
+
+visualize: $(BIN)
+	@echo -e "$(BLUE)→ [VIS] Visualizando ruta$(RESET)"
+	@./$(BIN) --contacts data/contacts_realistic.csv --src 100 --dst 200 --t0 0 --bytes 5e7 --k-yen 3 > /tmp/cgr_out.json
+	@python3 test/visualize_route.py --contacts data/contacts_realistic.csv --json /tmp/cgr_out.json
+
+analyze: $(BIN)
+	@echo -e "$(BLUE)→ [ANALYZE] Análisis de diversidad$(RESET)"
+	@./$(BIN) --contacts data/contacts_realistic.csv --src 100 --dst 200 --t0 0 --bytes 5e7 --k-yen 10 --format text | tee test/out/analysis.txt
+	@echo ""
+	@echo -e "$(GREEN)Análisis guardado en test/out/analysis.txt$(RESET)"
+
+.PHONY: test-all visualize analyze
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Ayuda
 # ─────────────────────────────────────────────────────────────────────────────
 

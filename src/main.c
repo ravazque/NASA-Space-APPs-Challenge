@@ -1,4 +1,4 @@
-// src/main.c — CLI mejorado con validación de entrada
+// src/main.c — CLI mejorado con validación de entrada y salida mejorada
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -53,7 +53,8 @@ static int parse_double_safe(const char *s, double *out){
     return 0;
 }
 
-/* ----------------------- Helpers de impresión (sin cambios) ----------------------- */
+/* ----------------------- Helpers de impresión JSON ----------------------- */
+
 static void print_json_route_compact(const Route *R, double t0){
     printf("{\"eta\":%.6f,\"latency\":%.6f,\"hops\":%d,\"contacts\":[",
            R->eta, R->eta - t0, R->hops);
@@ -129,6 +130,8 @@ static void print_json_multi(const Routes *RS, double t0, int pretty){
     }
 }
 
+/* ----------------------- Helpers de impresión TEXTO ----------------------- */
+
 static void print_text_single(const Route *R, double t0){
     if(!R->found){
         printf("No se encontró ruta.\n");
@@ -144,22 +147,65 @@ static void print_text_single(const Route *R, double t0){
     printf("\n");
 }
 
-static void print_text_multi(const Routes *RS, double t0, const char *title){
+// ✅ NUEVA: Versión mejorada con estadísticas y mejor formato
+static void print_text_multi_enhanced(const Routes *RS, double t0, const char *title){
     if(RS->count == 0){
         printf("No se encontraron rutas.\n");
         return;
     }
+    
     if(title && *title) printf("%s\n", title);
+    
+    // ✅ Calcular estadísticas
+    double min_eta = DBL_MAX, max_eta = 0, sum_eta = 0;
+    int min_hops = INT_MAX, max_hops = 0;
+    
     for(int r=0; r<RS->count; r++){
         const Route *R = &RS->items[r];
-        printf("Ruta #%d  |  ETA: %.3f s  |  Latencia: %.3f s  |  Saltos: %d\n", r+1, R->eta, R->eta - t0, R->hops);
-        printf("  contactos: ");
-        for(int i=0;i<R->hops;i++){
+        if(R->eta < min_eta) min_eta = R->eta;
+        if(R->eta > max_eta) max_eta = R->eta;
+        sum_eta += R->eta;
+        if(R->hops < min_hops) min_hops = R->hops;
+        if(R->hops > max_hops) max_hops = R->hops;
+    }
+    double avg_eta = sum_eta / RS->count;
+    
+    printf("┌─────────────────────────────────────────────────────────┐\n");
+    printf("│ 📊 Estadísticas de %d ruta(s):                          \n", RS->count);
+    printf("│   • ETA mínimo:   %.3f s                                \n", min_eta);
+    printf("│   • ETA máximo:   %.3f s                                \n", max_eta);
+    printf("│   • ETA promedio: %.3f s                                \n", avg_eta);
+    printf("│   • Diversidad:   %.3f s (Δmax-min)                    \n", max_eta - min_eta);
+    printf("│   • Saltos:       [%d, %d]                              \n", min_hops, max_hops);
+    printf("└─────────────────────────────────────────────────────────┘\n\n");
+    
+    for(int r=0; r<RS->count; r++){
+        const Route *R = &RS->items[r];
+        double latency = R->eta - t0;
+        
+        // Indicador visual de calidad (relativo al mejor)
+        double quality = (max_eta > min_eta) ? (R->eta - min_eta) / (max_eta - min_eta) : 0.0;
+        const char *indicator;
+        if(quality < 0.1) indicator = "🟢"; // Óptima
+        else if(quality < 0.3) indicator = "🟡"; // Buena
+        else indicator = "🟠"; // Alternativa
+        
+        printf("%s Ruta #%d\n", indicator, r+1);
+        printf("  ├─ ETA:      %.3f s\n", R->eta);
+        printf("  ├─ Latencia: %.3f s\n", latency);
+        printf("  ├─ Saltos:   %d\n", R->hops);
+        printf("  ├─ Overhead: +%.1f%% vs óptima\n", 
+               100.0 * (R->eta - min_eta) / (min_eta + 1e-9));
+        printf("  └─ Path:     ");
+        for(int i=0; i<R->hops; i++){
             if(i) printf(" → ");
             printf("%d", R->contact_ids[i]);
         }
         printf("\n");
-        if(r+1<RS->count) printf("— — — — — — — — — — — — — —\n");
+        
+        if(r+1 < RS->count){
+            printf("\n");
+        }
     }
 }
 
@@ -282,8 +328,11 @@ int main(int argc, char **argv){
     // Prioriza --k-yen si se indica
     if(K_yen > 0){
         Routes RS = cgr_k_yen(C, N, &P, NI, K_yen);
-        if(fmt == FMT_JSON)  print_json_multi(&RS, P.t0, pretty);
-        else                 print_text_multi(&RS, P.t0, "Rutas K (Yen-lite, sin consumo)");
+        if(fmt == FMT_JSON) {
+            print_json_multi(&RS, P.t0, pretty);
+        } else {
+            print_text_multi_enhanced(&RS, P.t0, "Rutas K (Yen-lite, sin consumo)");
+        }
         free_routes(&RS);
         free_neighbor_index(NI);
         free(C);
@@ -293,13 +342,19 @@ int main(int argc, char **argv){
     // Modo consumo
     if(K_consume == 1){
         Route R = cgr_best_route(C, N, &P, NI);
-        if(fmt == FMT_JSON)  print_json_single(&R, P.t0, pretty);
-        else                 print_text_single(&R, P.t0);
+        if(fmt == FMT_JSON) {
+            print_json_single(&R, P.t0, pretty);
+        } else {
+            print_text_single(&R, P.t0);
+        }
         free_route(&R);
     } else {
         Routes RS = cgr_k_routes(C, N, &P, NI, K_consume);
-        if(fmt == FMT_JSON)  print_json_multi(&RS, P.t0, pretty);
-        else                 print_text_multi(&RS, P.t0, "Rutas K (consumo de capacidad)");
+        if(fmt == FMT_JSON) {
+            print_json_multi(&RS, P.t0, pretty);
+        } else {
+            print_text_multi_enhanced(&RS, P.t0, "Rutas K (consumo de capacidad)");
+        }
         free_routes(&RS);
     }
 

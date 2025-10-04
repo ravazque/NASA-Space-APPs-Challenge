@@ -1,5 +1,5 @@
 // src/cgr.c — CGR: Dijkstra temporal (k=1), K por consumo y K Yen-lite (con filtros) — C puro
-// Versión mejorada con robustez y optimizaciones
+// Versión mejorada con robustez, optimizaciones y fix de duplicados en Yen
 
 #include <stdlib.h>
 #include <string.h>
@@ -26,6 +26,23 @@
 static inline int max3(int a, int b, int c) {
     int m = a > b ? a : b;
     return m > c ? m : c;
+}
+
+#include "leo_metrics.h"
+
+// ✅ NUEVA: Métrica compuesta que considera LEO
+static double eta_contact_leo(const Contact *c, double t_in, double bundle_bytes, 
+                              double expiry_abs, int prefer_isl) {
+    double base_eta = eta_contact(c, t_in, bundle_bytes, expiry_abs);
+    
+    if (base_eta == DBL_MAX || !prefer_isl) return base_eta;
+    
+    // Aplicar penalización por tipo de enlace
+    LeoMetrics m = compute_leo_metrics(c, t_in);
+    double penalty = link_type_penalty(m.link_type);
+    
+    // Añadir penalización temporal (favorece ISL sin cambiar ETA real)
+    return base_eta + penalty;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -514,8 +531,30 @@ Routes cgr_k_routes(const Contact *C_in, int N, const CgrParams *P, const Neighb
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// K rutas Yen-lite (diversidad sin consumo)
+// K rutas Yen-lite (diversidad sin consumo) - ✅ FIX DUPLICADOS
 // ═══════════════════════════════════════════════════════════════════════════
+
+// ✅ Helper: verificar si una ruta ya existe en el resultado
+static int route_already_exists(const Routes *rs, const Route *candidate) {
+    for (int i = 0; i < rs->count; i++) {
+        const Route *existing = &rs->items[i];
+        
+        // Mismo número de saltos
+        if (existing->hops != candidate->hops) continue;
+        
+        // Comparar secuencia completa
+        int same = 1;
+        for (int j = 0; j < existing->hops; j++) {
+            if (existing->contact_ids[j] != candidate->contact_ids[j]) {
+                same = 0;
+                break;
+            }
+        }
+        
+        if (same) return 1; // Duplicado encontrado
+    }
+    return 0;
+}
 
 Routes cgr_k_yen(const Contact *C, int N, const CgrParams *P, const NeighborIndex *NI, int K) {
     Routes out = {.items = NULL, .count = 0, .cap = 0};
@@ -538,68 +577,63 @@ Routes cgr_k_yen(const Contact *C, int N, const CgrParams *P, const NeighborInde
     out.items[out.count++] = base;
     DEBUG_PRINT("Ruta base: %d saltos, eta=%.3f\n", base.hops, base.eta);
 
-    // Generar rutas alternativas
-    for (int k = 1; k < K; k++) {
+    // ✅ FIX: Búsqueda exhaustiva de alternativas con deduplicación global
+    int max_attempts = K * 20; // Límite de intentos
+    int attempts = 0;
+    
+    while (out.count < K && attempts < max_attempts) {
+        attempts++;
+        
         double best_eta = DBL_MAX;
         Route best = {.contact_ids = NULL, .hops = 0, .eta = DBL_MAX, .found = false};
 
-        const Route *prev = &out.items[k - 1];
-        
-        DEBUG_PRINT("Buscando ruta alternativa #%d (base: %d saltos)\n", k + 1, prev->hops);
-
-        // Probar desvío en cada posición de la ruta anterior
-        for (int i = 0; i < prev->hops; i++) {
-            // Prefijo forzado: contactos [0..i-1]
-            CgrFilters F;
-            memset(&F, 0, sizeof(F));
-            F.forced_prefix_ids = prev->contact_ids;
-            F.forced_count = i;
-
-            // Contacto baneado: el i-ésimo de la ruta previa
-            int banned_one = prev->contact_ids[i];
-            F.banned_ids = &banned_one;
-            F.banned_count = 1;
-
-            DEBUG_PRINT("  Desvío en pos %d: prefijo=%d, ban=%d\n", i, F.forced_count, banned_one);
-
-            Route cand = cgr_best_route_filtered(C, N, P, NI, &F);
-            if (!cand.found) continue;
-
-            // Evitar duplicado exacto con la anterior
-            int same = (cand.hops == prev->hops);
-            if (same) {
-                for (int t = 0; t < cand.hops; t++) {
-                    if (cand.contact_ids[t] != prev->contact_ids[t]) {
-                        same = 0;
-                        break;
-                    }
-                }
-            }
+        // Probar desvíos desde TODAS las rutas ya encontradas
+        for (int route_idx = 0; route_idx < out.count; route_idx++) {
+            const Route *ref = &out.items[route_idx];
             
-            if (same) {
-                DEBUG_PRINT("    → Descartada (duplicado)\n");
-                free_route(&cand);
-                continue;
-            }
+            // Probar desvío en cada posición
+            for (int i = 0; i < ref->hops; i++) {
+                CgrFilters F;
+                memset(&F, 0, sizeof(F));
+                
+                // Prefijo forzado: [0..i-1]
+                F.forced_prefix_ids = ref->contact_ids;
+                F.forced_count = i;
 
-            // Quedarnos con la mejor alternativa
-            if (cand.eta < best_eta) {
-                if (best.found) free_route(&best);
-                best = cand;
-                best_eta = cand.eta;
-                DEBUG_PRINT("    → Mejor candidata: eta=%.3f\n", best_eta);
-            } else {
-                free_route(&cand);
+                // Contacto baneado: el i-ésimo
+                int banned_one = ref->contact_ids[i];
+                F.banned_ids = &banned_one;
+                F.banned_count = 1;
+
+                Route cand = cgr_best_route_filtered(C, N, P, NI, &F);
+                if (!cand.found) continue;
+
+                // ✅ FIX: Verificar contra TODAS las rutas existentes
+                if (route_already_exists(&out, &cand)) {
+                    free_route(&cand);
+                    continue;
+                }
+
+                // Quedarnos con la mejor nueva alternativa
+                if (cand.eta < best_eta) {
+                    if (best.found) free_route(&best);
+                    best = cand;
+                    best_eta = cand.eta;
+                } else {
+                    free_route(&cand);
+                }
             }
         }
 
+        // Si no encontramos ninguna nueva, terminar
         if (!best.found) {
-            DEBUG_PRINT("No hay más alternativas diversas\n");
+            DEBUG_PRINT("No hay más alternativas después de %d intentos\n", attempts);
             break;
         }
         
         out.items[out.count++] = best;
-        DEBUG_PRINT("✓ Ruta alternativa #%d: %d saltos, eta=%.3f\n", k + 1, best.hops, best.eta);
+        DEBUG_PRINT("✓ Ruta alternativa #%d: %d saltos, eta=%.3f\n", 
+                   out.count, best.hops, best.eta);
     }
 
     return out;
