@@ -72,6 +72,8 @@ debug: fclean $(BIN)
 clean:
 	@echo -e "$(RED)→ Limpiando objetos$(RESET)"
 	@rm -rf $(OBJ_DIR)
+	@rm -rf test/out
+	@rm -rf test/cases
 
 fclean: clean
 	@echo -e "$(RED)→ Limpiando ejecutable$(RESET)"
