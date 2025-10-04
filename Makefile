@@ -1,76 +1,95 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  EcoStation CGR — Makefile narrado
+# ─────────────────────────────────────────────────────────────────────────────
+# ¿Qué estás construyendo?
+#   Un ejecutable 'cgr' que calcula rutas en redes espaciales DTN usando
+#   Contact Graph Routing (CGR) sobre un grafo de contactos (ventanas de
+#   visibilidad). El objetivo es minimizar ETA (Earliest Time of Arrival).
+#
+# Algoritmo original (CGR, visión práctica):
+#   - Modelo "store-carry-forward" de DTN: los nodos solo pueden enviar datos
+#     cuando existe una ventana de contacto programada (contacto).
+#   - Se construye un grafo temporal donde CADA CONTACTO es un vértice,
+#     conectado con el siguiente si respeta la causalidad temporal.
+#   - Se busca la ruta de mínima ETA (Dijkstra temporal), respetando ventanas,
+#     latencia de propagación (OWLT) y caducidad del bundle.
+#
+# ¿Qué mejoras ya añade este repo (MVP+):
+#   1) Poda por CAPACIDAD: si el bundle no cabe en la ventana (rate × duración),
+#      descartamos el contacto. Simplificado como 'residual_bytes >= bundle_bytes'.
+#   2) K rutas prácticas (--k N): tras hallar una ruta, CONSUMIMOS capacidad
+#      (residual_bytes -= bundle_bytes) de los contactos usados y recomputamos.
+#      Produce rutas alternativas realistas en constelaciones LEO con ISL.
+#
+# ¿Qué mejoras planeadas encajan aquí (siguientes pasos):
+#   - Yen K-shortest (K rutas verdaderamente alternativas sin depender de consumo).
+#   - Prioridades y expiración estricta (BPv7): preferencia por bundles urgentes.
+#   - Capacidad dinámica por tiempo (consumo parcial, colas/backlog).
+#   - "Bans" de contactos/transiciones para rutas edge/node-disjoint.
+#
+# Relación con la realidad de redes LEO:
+#   - LEO-LEO tiene ventanas cortas y topología cambiante; CGR usa un "contact plan"
+#     programado para prever qué enlaces existirán y cuándo.
+#   - El consumo de capacidad aproxima congestión/uso de enlaces, tal y como pasa
+#     cuando varias misiones comparten ISL o downlinks con estaciones.
+#
+# Targets útiles:
+#   make            -> compila
+#   make run        -> ejecuta un ejemplo sobre data/contacts.csv (k=3)
+#   make debug      -> compila con símbolos de depuración
+#   make clean      -> limpia binarios y objetos
+#
+# Estructura:
+#   include/ : headers (APIs y structs)
+#   src/     : implementación (heap, csv, cgr, main)
+#   data/    : CSV de contactos de ejemplo
+#   tests/   : script de prueba
+# ─────────────────────────────────────────────────────────────────────────────
 
-SHELL = /bin/bash
-MAKEFLAGS += --no-print-directory
+CC       := gcc
+CFLAGS   := -O2 -Wall -Wextra -Wshadow -std=c17
+DFLAGS   := -O0 -g3 -fsanitize=address,undefined -fno-omit-frame-pointer
+INCLUDE  := -Iinclude
 
-NAME        = leo.a
+SRC      := src/heap.c src/csv.c src/cgr.c src/main.c
+OBJ      := $(SRC:.c=.o)
+BIN      := cgr
 
-SRC_DIR     = src
-INC_DIR     = include
+GREEN    := \033[32m
+YELLOW   := \033[33m
+BLUE     := \033[34m
+RESET    := \033[0m
 
-OBJ_DIR     = leoObjects
+.PHONY: all clean run debug help
 
-CC       = cc
-CFLAGS   = -Wall -Wextra -Werror -I$(INC_DIR)
-LDFLAGS  = -lreadline
+all: $(BIN)
+	@echo "$(GREEN)✓ Build completo:$(RESET) ./$(BIN)"
 
-SRCS = $(shell find $(SRC_DIR) -type f -name '*.c')
-OBJS = $(SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
+$(BIN): $(OBJ)
+	@echo "$(BLUE)→ Linkeando$(RESET) $@"
+	$(CC) $(CFLAGS) $(OBJ) -o $@
 
-RESET           = \033[0m
-TURQUOISE       = \033[0;36m
-LIGHT_TURQUOISE = \033[1;36m
-LIGHT_GREEN     = \033[1;32m
-LIGHT_RED       = \033[1;91m
+%.o: %.c include/*.h
+	@echo "$(BLUE)→ Compilando$(RESET) $<"
+	$(CC) $(CFLAGS) $(INCLUDE) -c $< -o $@
 
-TOTAL_STEPS = $(words $(SRCS))
+run: all
+	@echo "$(YELLOW)Ejecutando demo (k=3) sobre data/contacts.csv$(RESET)"
+	./$(BIN) --contacts data/contacts.csv --src 100 --dst 200 --t0 0 --bytes 5e7 --k 3
 
-define show_progress
-	@total=$(TOTAL_STEPS); \
-	[ "$$total" -gt 0 ] || total=1; \
-	curr=$$(find "$(OBJ_DIR)" -type f -name "*.o" 2>/dev/null | wc -l); \
-	width=60; \
-	hashes=$$(( curr * width / total )); \
-	[ "$$hashes" -ge 0 ] || hashes=0; \
-	dots=$$(( width - hashes )); \
-	[ "$$dots" -ge 0 ] || dots=0; \
-	green=$$(printf "\033[1;32m"); \
-	reset=$$(printf "\033[0m"); \
-	printf "\rCompiling: ["; \
-	bar=$$(printf "%*s" "$$hashes" ""); bar=$${bar// /#}; \
-	printf "%s" "$$green$$bar$$reset"; \
-	dot=$$(printf "%*s" "$$dots" ""); dot=$${dot// /.}; \
-	printf "%s" "$$dot"; \
-	printf "] %d/%d" "$$curr" "$$total"; \
-	if [ "$$curr" -ge "$$total" ]; then printf " ✓\n"; fi;
-endef
-
-all: $(NAME)
-
-$(NAME): $(OBJS)
-	@$(CC) $(CFLAGS) $(OBJS) $(LDFLAGS) -o $@
-	@echo -e "$(LIGHT_TURQUOISE)Leo ready!$(RESET)"
-
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
-	@mkdir -p $(dir $@)
-	@$(CC) $(CFLAGS) -c $< -o $@
-	$(call show_progress)
-
-$(OBJ_DIR):
-	@mkdir -p $@
+debug: CFLAGS := $(DFLAGS)
+debug: clean $(BIN)
+	@echo "$(GREEN)✓ Build debug listo$(RESET)"
+	@echo "$(YELLOW)Sugerencia: ejecuta con ASan/UBSan en tu entorno$(RESET)"
 
 clean:
-	@echo -e "$(LIGHT_RED)Running object cleanup...$(RESET)"
-	@rm -rf "$(OBJ_DIR)"
-	@echo -e "$(TURQUOISE)Cleaning of objects completed!$(RESET)"
+	@echo "$(BLUE)→ Limpiando$(RESET)"
+	rm -f $(OBJ) $(BIN)
 
-fclean:
-	@echo -e "$(LIGHT_RED)Running a full cleanup...$(RESET)"
-	@rm -rf "$(OBJ_DIR)"
-	@rm -f "$(NAME)"
-	@echo -e "$(TURQUOISE)Full cleaning finished!$(RESET)"
+help:
+	@echo "Targets:"
+	@echo "  make        -> compila"
+	@echo "  make run    -> ejecuta ejemplo con k=3"
+	@echo "  make debug  -> compila con símbolos y sanitizers"
+	@echo "  make clean  -> borra binarios/objetos"
 
-re:
-	@$(MAKE) fclean
-	@$(MAKE) -s all
-
-.PHONY: all clean fclean re
