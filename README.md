@@ -187,3 +187,8 @@ This MVP is intended for **simulation and research**. It doesn’t model securit
 
 > If you want, I can wire the current CLI outputs to this HTML template so it renders automatically after each run (no code walkthrough needed in the README; just a `make report`).
 
+---
+
+https://ravazque.github.io/NASA-Space-APPs-Challenge/
+
+
