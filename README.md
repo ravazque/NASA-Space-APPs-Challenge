@@ -41,7 +41,7 @@ The goal is to enable **rapid experiments** and exploration of routing decisions
 
 **CGR & Prediction services (simulated/remote):**
 
-* Within the corresponding folder, run **`make run`** to start the CGR scenario and related services. The independent collision predictor that is **not** part of `index.html` uses an **external API** even if it is used in index.html itself to make the corresponding predictions from our simulation data**.
+**Within the corresponding folder, run **`make run`** to start the CGR scenario and related services. The independent collision predictor that is **not** part of `index.html` uses an **external API** even if it is used in index.html itself to make the corresponding predictions from our simulation data**.
 
 ---
 
