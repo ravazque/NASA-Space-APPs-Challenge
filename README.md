@@ -11,6 +11,12 @@
 
 ---
 
+> ⚙️ **NOTE**
+> 
+> In some cases, when the number of satellites is reduced, the interface (in beta phase) may lose the route even if the simulation only has one. The transmitter and receiver must be reassigned so that the interface can reconnect all the information.
+
+---
+
 ## 1) What is this project?
 
 A functional prototype for **simulation and visualization** of LEO networks that integrates:
