@@ -1,1644 +1,1092 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>CGR Enhanced v3.1 - Dynamic LEO Routing</title>
-    <script src="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Cesium.js"></script>
-    <link href="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; overflow: hidden; background: #0a0e27; }
-        #cesiumContainer { width: 100vw; height: 100vh; }
-        
-        .panel {
-            position: absolute;
-            background: linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.95) 100%);
-            color: #e2e8f0;
-            padding: 20px;
-            border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 1px rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(20px) saturate(180%);
-            border: 1px solid rgba(148, 163, 184, 0.2);
-        }
-        
-        #leftPanel {
-            top: 20px; left: 20px; width: 420px;
-            max-height: calc(100vh - 40px);
-            overflow-y: auto;
-        }
-        
-        #rightPanel {
-            top: 20px; right: 20px; width: 480px;
-            max-height: calc(100vh - 40px);
-            overflow-y: auto;
-        }
-        
-        #bottomPanel {
-            bottom: 20px; left: 50%;
-            transform: translateX(-50%);
-            width: 700px;
-            max-height: 350px;
-            transition: all 0.3s ease;
-        }
-        
-        #bottomPanel.collapsed {
-            max-height: 60px;
-        }
-        
-        .toggle-header {
-            cursor: pointer;
-            user-select: none;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .toggle-icon {
-            transition: transform 0.3s ease;
-        }
-        
-        .toggle-icon.collapsed {
-            transform: rotate(-90deg);
-        }
-        
-        .header {
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 2px solid rgba(99, 102, 241, 0.3);
-        }
-        
-        h2 {
-            font-size: 22px;
-            font-weight: 700;
-            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 8px;
-            letter-spacing: -0.5px;
-        }
-        
-        .subtitle {
-            font-size: 12px;
-            color: #94a3b8;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-        }
-        
-        h3 {
-            margin: 25px 0 15px 0;
-            font-size: 15px;
-            color: #cbd5e1;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            font-weight: 600;
-            border-left: 3px solid #6366f1;
-            padding-left: 10px;
-        }
-        
-        .section {
-            background: rgba(30, 41, 59, 0.4);
-            padding: 16px;
-            border-radius: 10px;
-            margin-bottom: 16px;
-            border: 1px solid rgba(100, 116, 139, 0.15);
-            transition: all 0.3s ease;
-        }
-        
-        .section:hover {
-            background: rgba(30, 41, 59, 0.6);
-            border-color: rgba(99, 102, 241, 0.3);
-        }
-        
-        label {
-            display: block;
-            margin-bottom: 10px;
-            font-size: 13px;
-            color: #cbd5e1;
-            font-weight: 500;
-        }
-        
-        input[type="range"] {
-            width: 100%;
-            height: 8px;
-            border-radius: 4px;
-            background: linear-gradient(to right, #6366f1 0%, #6366f1 var(--value), rgba(148, 163, 184, 0.2) var(--value), rgba(148, 163, 184, 0.2) 100%);
-            outline: none;
-            margin: 10px 0;
-            -webkit-appearance: none;
-        }
-        
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-            cursor: pointer;
-            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.5);
-            transition: transform 0.2s;
-        }
-        
-        input[type="range"]::-webkit-slider-thumb:hover {
-            transform: scale(1.2);
-        }
-        
-        input[type="number"], select {
-            width: 100%;
-            padding: 12px;
-            background: rgba(15, 23, 42, 0.8);
-            border: 1px solid rgba(100, 116, 139, 0.3);
-            border-radius: 8px;
-            color: #e2e8f0;
-            font-size: 14px;
-            font-family: 'SF Mono', 'Menlo', monospace;
-            transition: all 0.3s;
-        }
-        
-        input[type="number"]:focus, select:focus {
-            outline: none;
-            border-color: #6366f1;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
-        }
-        
-        button {
-            width: 100%;
-            padding: 14px;
-            margin: 8px 0;
-            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            transition: all 0.3s;
-            box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
-            position: relative;
-            overflow: hidden;
-        }
-        
-        button::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: linear-gradient(135deg, transparent 0%, rgba(255, 255, 255, 0.1) 100%);
-            transform: translateX(-100%);
-            transition: transform 0.3s;
-        }
-        
-        button:hover::before {
-            transform: translateX(0);
-        }
-        
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(99, 102, 241, 0.6);
-        }
-        
-        button:active {
-            transform: translateY(0);
-        }
-        
-        button.secondary {
-            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(51, 65, 85, 0.8) 100%);
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-        }
-        
-        .value-badge {
-            display: inline-block;
-            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-            padding: 4px 12px;
-            border-radius: 8px;
-            margin-left: 10px;
-            font-weight: 700;
-            font-size: 13px;
-            font-family: 'SF Mono', 'Menlo', monospace;
-            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
-        }
-        
-        .metric-card {
-            background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(51, 65, 85, 0.7) 100%);
-            padding: 16px 18px;
-            border-radius: 12px;
-            margin: 12px 0;
-            border-left: 4px solid #6366f1;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-            transition: all 0.3s;
-        }
-        
-        .metric-card:hover {
-            transform: translateX(5px);
-            border-left-color: #a855f7;
-        }
-        
-        .metric-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin: 8px 0;
-        }
-        
-        .metric-label {
-            color: #94a3b8;
-            font-size: 13px;
-            font-weight: 500;
-        }
-        
-        .metric-value {
-            color: #e2e8f0;
-            font-weight: 700;
-            font-size: 17px;
-            font-family: 'SF Mono', 'Menlo', monospace;
-        }
-        
-        .metric-value.highlight {
-            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            font-size: 20px;
-        }
-        
-        .contact-window {
-            background: rgba(30, 41, 59, 0.6);
-            padding: 12px;
-            border-radius: 8px;
-            margin: 8px 0;
-            border-left: 3px solid #10b981;
-            font-size: 12px;
-            transition: all 0.3s;
-        }
-        
-        .contact-window:hover {
-            background: rgba(30, 41, 59, 0.8);
-            transform: translateX(3px);
-        }
-        
-        .contact-window.active {
-            border-left-color: #22c55e;
-            background: rgba(34, 197, 94, 0.15);
-            box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
-        }
-        
-        .contact-window.expired {
-            border-left-color: #ef4444;
-            opacity: 0.5;
-        }
-        
-        .contact-info {
-            display: flex;
-            justify-content: space-between;
-            margin: 6px 0;
-        }
-        
-        .contact-label {
-            color: #94a3b8;
-            font-weight: 500;
-        }
-        
-        .contact-value {
-            color: #e2e8f0;
-            font-weight: 600;
-            font-family: 'SF Mono', 'Menlo', monospace;
-        }
-        
-        .route-step {
-            background: rgba(99, 102, 241, 0.15);
-            padding: 12px;
-            border-radius: 8px;
-            margin: 8px 0;
-            border-left: 3px solid #6366f1;
-            font-size: 13px;
-        }
-        
-        .status-indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 10px;
-            animation: pulse 2s ease-in-out infinite;
-            box-shadow: 0 0 10px currentColor;
-        }
-        
-        .status-indicator.active { background: #22c55e; color: #22c55e; }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.7; transform: scale(1.1); }
-        }
-        
-        .algo-info {
-            background: rgba(59, 130, 246, 0.1);
-            border: 1px solid rgba(59, 130, 246, 0.3);
-            padding: 14px;
-            border-radius: 10px;
-            margin: 12px 0;
-            font-size: 12px;
-            line-height: 1.7;
-        }
-        
-        .legend-box {
-            background: rgba(30, 41, 59, 0.5);
-            padding: 14px;
-            border-radius: 8px;
-            margin: 15px 0;
-            border: 1px solid rgba(100, 116, 139, 0.2);
-        }
-        
-        .legend-item {
-            display: flex;
-            align-items: center;
-            margin: 8px 0;
-            font-size: 12px;
-        }
-        
-        .legend-color {
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            margin-right: 10px;
-            border: 2px solid white;
-        }
-        
-        .legend-color.source { background: #22c55e; }
-        .legend-color.destination { background: #ef4444; }
-        .legend-color.normal { background: #06b6d4; }
-        
-        .collision-warning {
-            background: rgba(239, 68, 68, 0.2);
-            border: 2px solid #ef4444;
-            padding: 12px;
-            border-radius: 8px;
-            margin: 8px 0;
-            font-size: 12px;
-            animation: warning-pulse 2s ease-in-out infinite;
-        }
-        
-        @keyframes warning-pulse {
-            0%, 100% { background: rgba(239, 68, 68, 0.2); }
-            50% { background: rgba(239, 68, 68, 0.4); }
-        }
-        
-        .collision-safe {
-            background: rgba(34, 197, 94, 0.2);
-            border: 2px solid #22c55e;
-            padding: 12px;
-            border-radius: 8px;
-            margin: 8px 0;
-            font-size: 12px;
-        }
-        
-        .tab-container {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 16px;
-        }
-        
-        .tab {
-            flex: 1;
-            padding: 10px;
-            background: rgba(30, 41, 59, 0.5);
-            border: 1px solid rgba(100, 116, 139, 0.2);
-            border-radius: 8px;
-            cursor: pointer;
-            text-align: center;
-            font-size: 12px;
-            font-weight: 600;
-            transition: all 0.3s;
-        }
-        
-        .tab:hover {
-            background: rgba(30, 41, 59, 0.8);
-        }
-        
-        .tab.active {
-            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-            border-color: #6366f1;
-        }
-        
-        .tab-content {
-            display: none;
-        }
-        
-        .tab-content.active {
-            display: block;
-        }
-        
-        .collapsible-content {
-            overflow-y: auto;
-            transition: max-height 0.3s ease;
-        }
-        
-        ::-webkit-scrollbar {
-            width: 10px;
-            height: 10px;
-        }
-        
-        ::-webkit-scrollbar-track {
-            background: rgba(30, 41, 59, 0.5);
-            border-radius: 5px;
-        }
-        
-        ::-webkit-scrollbar-thumb {
-            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-            border-radius: 5px;
-        }
-        
-        ::-webkit-scrollbar-thumb:hover {
-            background: linear-gradient(135deg, #a855f7 0%, #6366f1 100%);
-        }
-        
-        .badge-new {
-            background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);
-            color: white;
-            padding: 3px 8px;
-            border-radius: 4px;
-            font-size: 10px;
-            font-weight: 700;
-            margin-left: 8px;
-            animation: blink 2s ease-in-out infinite;
-        }
-        
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; }
-        }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CGR Enhanced v3.2 - Dynamic LEO Routing (Fixed)</title>
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; overflow: hidden; background: #0a0e27; }
+    #cesiumContainer { width: 100vw; height: 100vh; }
+
+    .panel {
+      position: absolute;
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.95) 100%);
+      color: #e2e8f0;
+      padding: 20px;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 1px rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+    #leftPanel { top: 20px; left: 20px; width: 420px; max-height: calc(100vh - 40px); overflow-y: auto; }
+    #rightPanel { top: 20px; right: 20px; width: 480px; max-height: calc(100vh - 40px); overflow-y: auto; }
+    #bottomPanel { bottom: 20px; left: 50%; transform: translateX(-50%); width: 700px; max-height: 350px; transition: all 0.3s ease; }
+    #bottomPanel.collapsed { max-height: 60px; }
+    .toggle-header { cursor: pointer; user-select: none; display: flex; justify-content: space-between; align-items: center; }
+    .toggle-icon { transition: transform 0.3s ease; }
+    .toggle-icon.collapsed { transform: rotate(-90deg); }
+    .header { margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid rgba(99, 102, 241, 0.3); }
+    h2 { font-size: 22px; font-weight: 700; background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px; letter-spacing: -0.5px; }
+    .subtitle { font-size: 12px; color: #94a3b8; font-weight: 500; text-transform: uppercase; letter-spacing: 0.8px; }
+    h3 { margin: 25px 0 15px 0; font-size: 15px; color: #cbd5e1; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; border-left: 3px solid #6366f1; padding-left: 10px; }
+    .section { background: rgba(30, 41, 59, 0.4); padding: 16px; border-radius: 10px; margin-bottom: 16px; border: 1px solid rgba(100, 116, 139, 0.15); transition: all 0.3s ease; }
+    .section:hover { background: rgba(30, 41, 59, 0.6); border-color: rgba(99, 102, 241, 0.3); }
+    label { display: block; margin-bottom: 10px; font-size: 13px; color: #cbd5e1; font-weight: 500; }
+
+    input[type="range"] { width: 100%; height: 8px; border-radius: 4px; background: linear-gradient(to right, #6366f1 0%, #6366f1 var(--value), rgba(148,163,184,0.2) var(--value), rgba(148,163,184,0.2) 100%); outline: none; margin: 10px 0; -webkit-appearance: none; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%; background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); cursor: pointer; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.5); transition: transform 0.2s; }
+    input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+
+    input[type="number"], select {
+      width: 100%; padding: 12px; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(100, 116, 139, 0.3); border-radius: 8px; color: #e2e8f0; font-size: 14px; font-family: 'SF Mono', 'Menlo', monospace; transition: all 0.3s;
+    }
+    input[type="number"]:focus, select:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2); }
+
+    button {
+      width: 100%; padding: 14px; margin: 8px 0; background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); color: white; border: none; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.3s; box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4); position: relative; overflow: hidden;
+    }
+    button::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, transparent 0%, rgba(255, 255, 255, 0.1) 100%); transform: translateX(-100%); transition: transform 0.3s; }
+    button:hover::before { transform: translateX(0); }
+    button:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(99, 102, 241, 0.6); }
+    button:active { transform: translateY(0); }
+    button.secondary { background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(51, 65, 85, 0.8) 100%); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); }
+
+    .value-badge { display: inline-block; background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); padding: 4px 12px; border-radius: 8px; margin-left: 10px; font-weight: 700; font-size: 13px; font-family: 'SF Mono', 'Menlo', monospace; box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3); }
+    .metric-card { background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(51, 65, 85, 0.7) 100%); padding: 16px 18px; border-radius: 12px; margin: 12px 0; border-left: 4px solid #6366f1; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); transition: all 0.3s; }
+    .metric-card:hover { transform: translateX(5px); border-left-color: #a855f7; }
+    .metric-row { display: flex; justify-content: space-between; align-items: center; margin: 8px 0; }
+    .metric-label { color: #94a3b8; font-size: 13px; font-weight: 500; }
+    .metric-value { color: #e2e8f0; font-weight: 700; font-size: 17px; font-family: 'SF Mono', 'Menlo', monospace; }
+    .metric-value.highlight { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 20px; }
+    .contact-window { background: rgba(30, 41, 59, 0.6); padding: 12px; border-radius: 8px; margin: 8px 0; border-left: 3px solid #10b981; font-size: 12px; transition: all 0.3s; }
+    .contact-window:hover { background: rgba(30, 41, 59, 0.8); transform: translateX(3px); }
+    .contact-window.active { border-left-color: #22c55e; background: rgba(34, 197, 94, 0.15); box-shadow: 0 0 20px rgba(34, 197, 94, 0.3); }
+    .route-step { background: rgba(99, 102, 241, 0.15); padding: 12px; border-radius: 8px; margin: 8px 0; border-left: 3px solid #6366f1; font-size: 13px; }
+
+    .status-indicator { width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-right: 10px; animation: pulse 2s ease-in-out infinite; box-shadow: 0 0 10px currentColor; }
+    .status-indicator.active { background: #22c55e; color: #22c55e; }
+    @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.7; transform: scale(1.1); } }
+
+    .algo-info { background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); padding: 14px; border-radius: 10px; margin: 12px 0; font-size: 12px; line-height: 1.7; }
+
+    .legend-box { background: rgba(30, 41, 59, 0.5); padding: 14px; border-radius: 8px; margin: 15px 0; border: 1px solid rgba(100, 116, 139, 0.2); }
+    .legend-item { display: flex; align-items: center; margin: 8px 0; font-size: 12px; }
+    .legend-color { width: 16px; height: 16px; border-radius: 50%; margin-right: 10px; border: 2px solid white; }
+    .legend-color.source { background: #22c55e; }
+    .legend-color.destination { background: #ef4444; }
+    .legend-color.normal { background: #06b6d4; }
+
+    .collision-warning { background: rgba(239, 68, 68, 0.2); border: 2px solid #ef4444; padding: 12px; border-radius: 8px; margin: 8px 0; font-size: 12px; animation: warning-pulse 2s ease-in-out infinite; }
+    @keyframes warning-pulse { 0%, 100% { background: rgba(239, 68, 68, 0.2); } 50% { background: rgba(239, 68, 68, 0.4); } }
+    .collision-safe { background: rgba(34, 197, 94, 0.2); border: 2px solid #22c55e; padding: 12px; border-radius: 8px; margin: 8px 0; font-size: 12px; }
+
+    .tab-container { display: flex; gap: 8px; margin-bottom: 16px; }
+    .tab { flex: 1; padding: 10px; background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(100, 116, 139, 0.2); border-radius: 8px; cursor: pointer; text-align: center; font-size: 12px; font-weight: 600; transition: all 0.3s; }
+    .tab:hover { background: rgba(30, 41, 59, 0.8); }
+    .tab.active { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); border-color: #6366f1; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: rgba(30, 41, 59, 0.5); border-radius: 5px; }
+    ::-webkit-scrollbar-thumb { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); border-radius: 5px; }
+    ::-webkit-scrollbar-thumb:hover { background: linear-gradient(135deg, #a855f7 0%, #6366f1 100%); }
+
+    .badge-new { background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%); color: white; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; margin-left: 8px; animation: blink 2s ease-in-out infinite; }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+    .sim-time {
+      position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.95); color: #e2e8f0; padding: 10px 20px; border-radius: 8px;
+      font-family: 'SF Mono', monospace; font-size: 14px; border: 1px solid rgba(99, 102, 241, 0.3);
+    }
+  </style>
 </head>
 <body>
-    <div id="cesiumContainer"></div>
-    
-    <!-- Panel Izquierdo -->
-    <div id="leftPanel" class="panel">
-        <div class="header">
-            <h2>Configuración Avanzada</h2>
-            <div class="subtitle">CGR Enhanced v3.1 <span class="badge-new">OPTIMIZADO</span></div>
-        </div>
-        
-        <div class="section">
-            <label>Número de Satélites: <span class="value-badge" id="satCountDisplay">27</span></label>
-            <input type="range" id="satCount" min="9" max="36" value="27" step="9" style="--value: 67%">
-        </div>
-        
-        <div class="section">
-            <label>Altitud Orbital (km): <span class="value-badge" id="altDisplay">780</span></label>
-            <input type="range" id="altitude" min="400" max="1200" value="780" step="50" style="--value: 47.5%">
-        </div>
-        
-        <div class="section">
-            <label>Velocidad Simulación: <span class="value-badge" id="speedDisplay">30x</span></label>
-            <input type="range" id="simSpeed" min="10" max="200" value="30" step="10" style="--value: 10%">
-        </div>
-        
-        <h3>Algoritmo CGR <span class="badge-new">AUTO-ADAPTATIVO</span></h3>
-        
-        <div class="section">
-            <label>Modo de Ruteo:</label>
-            <select id="routingAlgorithm">
-                <option value="cgr-classic">CGR Clásico</option>
-                <option value="cgr-enhanced">CGR Enhanced</option>
-                <option value="auto" selected>Auto (Mejor Performance)</option>
-            </select>
-        </div>
-        
-        <div class="algo-info">
-            <strong>Modo Auto:</strong> Selecciona automáticamente el algoritmo más rápido. Actualiza la ruta cada 2 segundos para máxima visualización.
-        </div>
-        
-        <div class="section">
-            <label>Frecuencia Recálculo (s): <span class="value-badge" id="recalcDisplay">2</span></label>
-            <input type="range" id="recalcFreq" min="1" max="10" value="2" step="1" style="--value: 11%">
-        </div>
-        
-        <div class="section">
-            <label>Horizonte de Planificación (min):</label>
-            <input type="number" id="planningHorizon" value="90" min="5" max="120" step="5">
-        </div>
-        
-        <div class="section">
-            <label>Tamaño Bundle (MB):</label>
-            <input type="number" id="bundleSize" value="5" min="1" max="500" step="1">
-        </div>
-        
-        <h3>Rutas Alternativas</h3>
-        
-        <div class="section">
-            <label>K Rutas (Yen-lite): <span class="value-badge" id="kDisplay">3</span></label>
-            <input type="range" id="kRoutes" min="1" max="10" value="3" step="1" style="--value: 22%">
-        </div>
-        
-        <div class="legend-box">
-            <div class="legend-item">
-                <div class="legend-color source"></div>
-                <span><strong>Verde:</strong> Emisor</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color destination"></div>
-                <span><strong>Rojo:</strong> Receptor</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color normal"></div>
-                <span><strong>Cyan:</strong> Intermedios</span>
-            </div>
-        </div>
-        
-        <button onclick="manualRecalc()">Recalcular Ahora</button>
-        <button onclick="runComparison()" class="secondary">Comparar Algoritmos</button>
-        <button onclick="toggleAnimation()" class="secondary">Play/Pause</button>
-        <button onclick="resetView()" class="secondary">Resetear Vista</button>
-    </div>
-    
-    <!-- Panel Derecho -->
-    <div id="rightPanel" class="panel">
-        <div class="header">
-            <h2>Métricas en Tiempo Real</h2>
-            <div class="subtitle">Rendimiento del Sistema</div>
-        </div>
-        
-        <div class="metric-card">
-            <div class="status-indicator active"></div>
-            <strong>Algoritmo Activo:</strong> <span id="activeAlgo">Auto-selección</span>
-        </div>
-        
-        <div class="metric-card">
-            <div class="metric-row">
-                <span class="metric-label">Enlaces Activos:</span>
-                <span class="metric-value highlight" id="activeContacts">0</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Última Recálculo:</span>
-                <span class="metric-value" id="lastRecalc">-</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Tiempo Cálculo:</span>
-                <span class="metric-value" id="calcTime">-</span>
-            </div>
-        </div>
-        
-        <h3>Detección de Colisiones</h3>
-        
-        <div class="section">
-            <label>Distancia Mínima Segura (km):</label>
-            <input type="number" id="safeDistance" value="5" min="1" max="50" step="1">
-        </div>
-        
-        <div id="collisionStatus"></div>
-        
-        <h3>Ruta Activa</h3>
-        
-        <div class="metric-card">
-            <div class="metric-row">
-                <span class="metric-label">Latencia E2E:</span>
-                <span class="metric-value highlight" id="routeLatency">-</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Saltos:</span>
-                <span class="metric-value" id="routeHops">0</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Eficiencia vs Clásico:</span>
-                <span class="metric-value" id="efficiency">-</span>
-            </div>
-        </div>
-        
-        <h3>Rutas Alternativas K-Yen</h3>
-        <div id="alternativeRoutes" style="max-height: 180px; overflow-y: auto;">
-        </div>
-    </div>
-    
-    <!-- Panel Inferior -->
-    <div id="bottomPanel" class="panel collapsed">
-        <div class="header toggle-header" onclick="toggleBottomPanel()">
-            <div>
-                <h2>Información del Sistema</h2>
-                <div class="subtitle"></div>
-            </div>
-            <span class="toggle-icon collapsed">▼</span>
-        </div>
-        <div class="collapsible-content" id="contactWindowsContent" style="max-height: 0; overflow: hidden;">
-            <div class="tab-container">
-                <div class="tab active" onclick="switchTab('contacts')">Enlaces</div>
-                <div class="tab" onclick="switchTab('collisions')">Colisiones</div>
-            </div>
-            
-            <div id="contactsTab" class="tab-content active">
-                <div id="contactWindows" style="max-height: 240px; overflow-y: auto;"></div>
-            </div>
-            
-            <div id="collisionsTab" class="tab-content">
-                <div id="collisionsList" style="max-height: 240px; overflow-y: auto;"></div>
-            </div>
-        </div>
+  <div id="cesiumContainer"></div>
+
+  <!-- Simulation Time Display -->
+  <div class="sim-time">Simulation Time: <span id="simTimeDisplay">0.0</span> s</div>
+
+  <!-- Left Panel -->
+  <div id="leftPanel" class="panel">
+    <div class="header">
+      <h2>Advanced Configuration</h2>
+      <div class="subtitle">CGR Enhanced v3.2 <span class="badge-new">OPTIMIZED</span></div>
     </div>
 
-    <script>
-        Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5N2UyMjcwOS00MDY1LTQxYjEtYjZjMy00YTU0ZTg1YmJhMzEiLCJpZCI6ODAzMDYsImlhdCI6MTY0Mjc0ODI2MX0.dkwAL1CcljUV7NA7fDbhXXnmyZQU_c-G5zRx8PtEcxE';
-        
-        const viewer = new Cesium.Viewer('cesiumContainer', {
-            imageryProvider: new Cesium.TileMapServiceImageryProvider({
-                url: Cesium.buildModuleUrl('Assets/Textures/NaturalEarthII')
-            }),
-            baseLayerPicker: false,
-            geocoder: false,
-            homeButton: false,
-            sceneModePicker: false,
-            timeline: false,
-            animation: false,
-            navigationHelpButton: false,
-            fullscreenButton: false
-        });
+    <div class="section">
+      <label>Number of Satellites: <span class="value-badge" id="satCountDisplay">27</span></label>
+      <input type="range" id="satCount" min="9" max="36" value="27" step="9" style="--value: 67%">
+    </div>
 
-        viewer.scene.globe.enableLighting = true;
-        viewer.scene.globe.atmosphereLightIntensity = 3.0;
-        viewer.scene.globe.showGroundAtmosphere = true;
+    <div class="section">
+      <label>Orbital Altitude (km): <span class="value-badge" id="altDisplay">600</span></label>
+      <input type="range" id="altitude" min="400" max="1200" value="600" step="50" style="--value: 25%">
+    </div>
 
-        const EARTH_RADIUS = 6371000;
-        const GM = 3.986004418e14;
-        
-        let satellites = [];
-        let contactGraph = [];
-        let currentRoute = null;
-        let sourceNode = null;
-        let destNode = null;
-        let simulationTime = 0;
-        let linkEntities = [];
-        let routeEntities = [];
-        let edgeStates = [];
-        let collisionWarnings = [];
-        let activeTab = 'contacts';
-        let lastRecalcTime = 0;
-        let performanceStats = { classic: 0, enhanced: 0 };
-        
-        let config = {
-            satCount: 27,
-            altitude: 780000,
-            simSpeed: 30,
-            planningHorizon: 90 * 60,
-            bundleSize: 5 * 1e6,
-            routingAlgorithm: 'auto',
-            kRoutes: 3,
-            safeDistance: 5000,
-            recalcFreq: 2
-        };
+    <div class="section">
+      <label>Simulation Speed: <span class="value-badge" id="speedDisplay">20x</span></label>
+      <input type="range" id="simSpeed" min="1" max="100" value="20" step="1" style="--value: 20%">
+    </div>
 
-        function toggleBottomPanel() {
-            const panel = document.getElementById('bottomPanel');
-            const content = document.getElementById('contactWindowsContent');
-            const icon = document.querySelector('.toggle-icon');
-            
-            if (panel.classList.contains('collapsed')) {
-                panel.classList.remove('collapsed');
-                content.style.maxHeight = '280px';
-                icon.classList.remove('collapsed');
-            } else {
-                panel.classList.add('collapsed');
-                content.style.maxHeight = '0';
-                icon.classList.add('collapsed');
+    <h3>CGR Algorithm <span class="badge-new">AUTO-ADAPTIVE</span></h3>
+
+    <div class="section">
+      <label>Routing Mode:</label>
+      <select id="routingAlgorithm">
+        <option value="cgr-classic">CGR Classic</option>
+        <option value="cgr-enhanced" selected>CGR Enhanced (Optimized)</option>
+        <option value="auto">Auto (Best Performance)</option>
+      </select>
+    </div>
+
+    <div class="algo-info">
+      <strong>Enhanced Mode:</strong> Optimized CGR with quality-aware routing, intelligent pruning, and automatic fallback for maximum reliability.
+    </div>
+
+    <div class="section">
+      <label>Recalculation Frequency (s): <span class="value-badge" id="recalcDisplay">3</span></label>
+      <input type="range" id="recalcFreq" min="1" max="10" value="3" step="1" style="--value: 22%">
+    </div>
+
+    <div class="section">
+      <label>Planning Horizon (min):</label>
+      <input type="number" id="planningHorizon" value="30" min="5" max="180" step="5">
+    </div>
+
+    <div class="section">
+      <label>Bundle Size (MB):</label>
+      <input type="number" id="bundleSize" value="2" min="1" max="500" step="1">
+    </div>
+
+    <h3>Alternative Routes</h3>
+    <div class="section">
+      <label>K Routes (Yen's Algorithm): <span class="value-badge" id="kDisplay">3</span></label>
+      <input type="range" id="kRoutes" min="1" max="10" value="3" step="1" style="--value: 22%">
+    </div>
+
+    <div class="legend-box">
+      <div class="legend-item"><div class="legend-color source"></div><span><strong>Green:</strong> Source Node</span></div>
+      <div class="legend-item"><div class="legend-color destination"></div><span><strong>Red:</strong> Destination Node</span></div>
+      <div class="legend-item"><div class="legend-color normal"></div><span><strong>Cyan:</strong> Regular Satellite</span></div>
+    </div>
+
+    <button onclick="changeSenderReceiver()">🔄 Change Source & Destination</button>
+    <button onclick="toggleAnimation()" class="secondary">⏯️ Play/Pause</button>
+    <button onclick="resetView()" class="secondary">🏠 Reset View</button>
+  </div>
+
+  <!-- Right Panel -->
+  <div id="rightPanel" class="panel">
+    <div class="header">
+      <h2>Real-time Metrics</h2>
+      <div class="subtitle">System Performance</div>
+    </div>
+
+    <div class="metric-card">
+      <div class="status-indicator active"></div>
+      <strong>Active Algorithm:</strong> <span id="activeAlgo">CGR Enhanced</span>
+    </div>
+
+    <div class="metric-card">
+      <div class="metric-row"><span class="metric-label">Active Links:</span><span class="metric-value highlight" id="activeContacts">0</span></div>
+      <div class="metric-row"><span class="metric-label">Last Recalculation:</span><span class="metric-value" id="lastRecalc">-</span></div>
+      <div class="metric-row"><span class="metric-label">Calculation Time:</span><span class="metric-value" id="calcTime">-</span></div>
+    </div>
+
+    <h3>Collision Detection</h3>
+    <div class="section">
+      <label>Minimum Safe Distance (km):</label>
+      <input type="number" id="safeDistance" value="2" min="1" max="50" step="1">
+    </div>
+    <div id="collisionStatus"></div>
+
+    <h3>Active Route</h3>
+    <div class="metric-card">
+      <div class="metric-row"><span class="metric-label">E2E Latency:</span><span class="metric-value highlight" id="routeLatency">-</span></div>
+      <div class="metric-row"><span class="metric-label">Total Hops:</span><span class="metric-value" id="routeHops">-</span></div>
+    </div>
+
+    <h3>Alternative K-Yen Routes</h3>
+    <div id="alternativeRoutes" style="max-height: 180px; overflow-y: auto;"></div>
+  </div>
+
+  <!-- Bottom Panel -->
+  <div id="bottomPanel" class="panel collapsed">
+    <div class="header toggle-header" onclick="toggleBottomPanel()">
+      <div>
+        <h2>System Information</h2>
+        <div class="subtitle">Contact Windows & Collision Alerts</div>
+      </div>
+      <span class="toggle-icon collapsed">▼</span>
+    </div>
+    <div class="collapsible-content" id="contactWindowsContent" style="max-height: 0; overflow: hidden;">
+      <div class="tab-container">
+        <div class="tab active" onclick="switchTab('contacts')">Contact Windows</div>
+        <div class="tab" onclick="switchTab('collisions')">Collision Alerts</div>
+      </div>
+
+      <div id="contactsTab" class="tab-content active"><div id="contactWindows" style="max-height: 240px; overflow-y: auto;"></div></div>
+      <div id="collisionsTab" class="tab-content"><div id="collisionsList" style="max-height: 240px; overflow-y: auto;"></div></div>
+    </div>
+  </div>
+
+  <script>
+    // =============== CESIUM INITIALIZATION ===============
+    Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5N2UyMjcwOS00MDY1LTQxYjEtYjZjMy00YTU0ZTg1YmJhMzEiLCJpZCI6ODAzMDYsImlhdCI6MTY0Mjc0ODI2MX0.dkwAL1CcljUV7NA7fDbhXXnmyZQU_c-G5zRx8PtEcxE';
+
+    const viewer = new Cesium.Viewer('cesiumContainer', {
+      imageryProvider: new Cesium.TileMapServiceImageryProvider({
+        url: Cesium.buildModuleUrl('Assets/Textures/NaturalEarthII')
+      }),
+      baseLayerPicker: false,
+      geocoder: false,
+      homeButton: false,
+      sceneModePicker: false,
+      timeline: true,
+      animation: true,
+      navigationHelpButton: false,
+      fullscreenButton: false
+    });
+
+    viewer.scene.globe.enableLighting = true;
+    viewer.scene.globe.atmosphereLightIntensity = 3.0;
+    viewer.scene.globe.showGroundAtmosphere = true;
+
+    // =============== CONSTANTS ===============
+    const EARTH_RADIUS = 6_371_000; // meters
+    const GM = 3.986004418e14; // m^3/s^2 (no imprescindible para la animación simple)
+    const C = 299_792_458; // speed of light (m/s)
+
+    // =============== STATE ===============
+    let satellites = [];      // array de { id, plane, index, meanAnomalyStart, inclination, raan, entity }
+    let contactGraph = [];    // array de contactos (aristas temporales)
+    let currentRoute = null;
+    let linkEntities = [];    // enlaces activos dibujados
+    let routeEntities = [];   // ruta activa dibujada
+    let collisionWarnings = [];
+    let activeTab = 'contacts';
+
+    let sourceNode = null;
+    let destNode = null;
+
+    // Métricas
+    let lastRecalcTime = 0;
+    let performanceStats = { classic: 0, enhanced: 0 };
+
+    // =============== CONFIG ===============
+    let config = {
+      satCount: 27,
+      altitude: 600_000,         // meters
+      simSpeed: 20,
+      planningHorizon: 30 * 60,  // seconds
+      bundleSize: 2 * 1e6,       // bytes
+      routingAlgorithm: 'cgr-enhanced',
+      kRoutes: 3,
+      safeDistance: 2_000,       // meters
+      recalcFreq: 3              // seconds
+    };
+
+    // =============== CLOCK (ÚNICA FUENTE DE TIEMPO) ===============
+    const startJD = Cesium.JulianDate.now();
+    const stopJD  = Cesium.JulianDate.addDays(startJD, 1, new Cesium.JulianDate());
+    viewer.clock.startTime   = startJD.clone();
+    viewer.clock.stopTime    = stopJD.clone();
+    viewer.clock.currentTime = startJD.clone();
+    viewer.clock.clockRange  = Cesium.ClockRange.LOOP_STOP;
+    viewer.clock.multiplier  = config.simSpeed;
+    viewer.clock.shouldAnimate = true;
+
+    function simSeconds() {
+      return Cesium.JulianDate.secondsDifference(viewer.clock.currentTime, viewer.clock.startTime);
+    }
+
+    // =============== UI HELPERS ===============
+    function toggleBottomPanel() {
+      const panel = document.getElementById('bottomPanel');
+      const content = document.getElementById('contactWindowsContent');
+      const icon = document.querySelector('.toggle-icon');
+      if (panel.classList.contains('collapsed')) {
+        panel.classList.remove('collapsed');
+        content.style.maxHeight = '280px';
+        icon.classList.remove('collapsed');
+      } else {
+        panel.classList.add('collapsed');
+        content.style.maxHeight = '0';
+        icon.classList.add('collapsed');
+      }
+    }
+
+    function switchTab(tabName) {
+      activeTab = tabName;
+      document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+      if (tabName === 'contacts') {
+        document.querySelector('.tab:nth-child(1)').classList.add('active');
+        document.getElementById('contactsTab').classList.add('active');
+      } else {
+        document.querySelector('.tab:nth-child(2)').classList.add('active');
+        document.getElementById('collisionsTab').classList.add('active');
+      }
+    }
+
+    function updateDisplayBadges() {
+      document.getElementById('satCountDisplay').textContent = config.satCount;
+      document.getElementById('altDisplay').textContent = Math.round(config.altitude/1000);
+      document.getElementById('speedDisplay').textContent = `${config.simSpeed}x`;
+      document.getElementById('recalcDisplay').textContent = config.recalcFreq;
+      document.getElementById('kDisplay').textContent = config.kRoutes;
+    }
+
+    // =============== ORBIT & POSITIONS ===============
+    // Animación simplificada con período artificial (para ver movimiento suave)
+    const ORBITAL_PERIOD_SIM = 6000; // s
+
+    function getSatellitePosition(plane, satIndex, meanAnomalyStart, inclination, raan, tSec) {
+      const meanMotion = (2 * Math.PI) / ORBITAL_PERIOD_SIM;
+      const meanAnomalyDeg = meanAnomalyStart + (meanMotion * tSec * 180 / Math.PI);
+
+      const a = EARTH_RADIUS + config.altitude;
+      const incRad = Cesium.Math.toRadians(inclination);
+      const raanRad = Cesium.Math.toRadians(raan);
+      const maRad = Cesium.Math.toRadians(meanAnomalyDeg);
+
+      const x = a * (Math.cos(raanRad) * Math.cos(maRad) - Math.sin(raanRad) * Math.sin(maRad) * Math.cos(incRad));
+      const y = a * (Math.sin(raanRad) * Math.cos(maRad) + Math.cos(raanRad) * Math.sin(maRad) * Math.cos(incRad));
+      const z = a * Math.sin(maRad) * Math.sin(incRad);
+
+      return new Cesium.Cartesian3(x, y, z);
+    }
+
+    function addSatelliteEntity(sat) {
+      const color =
+        (sourceNode && sat.id === sourceNode.id) ? Cesium.Color.LIME :
+        (destNode && sat.id === destNode.id) ? Cesium.Color.RED :
+        Cesium.Color.CYAN;
+
+      sat.entity = viewer.entities.add({
+        name: `SAT-${sat.id}`,
+        position: new Cesium.CallbackProperty(() => {
+          const t = simSeconds();
+          return getSatellitePosition(sat.plane, sat.index, sat.meanAnomalyStart, sat.inclination, sat.raan, t);
+        }, false),
+        point: { pixelSize: 8, color: color, outlineWidth: 2, outlineColor: Cesium.Color.WHITE },
+        label: {
+          text: `S${sat.id}`,
+          font: '12px monospace',
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          fillColor: Cesium.Color.WHITE,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 2,
+          pixelOffset: new Cesium.Cartesian2(0, -18),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY
+        }
+      });
+    }
+
+    function clearSatellites() {
+      satellites.forEach(s => { if (s.entity) viewer.entities.remove(s.entity); });
+      satellites = [];
+    }
+
+    function initConstellation(satCount, altitude) {
+      clearSatellites();
+
+      const planes = Math.max(1, Math.round(satCount / 9)); // p.ej., 27 => 3 planos
+      const satsPerPlane = Math.round(satCount / planes);
+      const baseInclination = 53; // grados
+      const raanStep = 360 / planes;
+
+      let idCounter = 1;
+
+      for (let p = 0; p < planes; p++) {
+        const raan = (p * raanStep) % 360;
+        for (let s = 0; s < satsPerPlane; s++) {
+          const meanAnomalyStart = (s * 360 / satsPerPlane) % 360;
+          const sat = {
+            id: idCounter++,
+            plane: p,
+            index: s,
+            meanAnomalyStart,
+            inclination: baseInclination + (p % 2 === 0 ? 0 : 5), // un poco de variación
+            raan,
+            entity: null
+          };
+          satellites.push(sat);
+        }
+      }
+
+      // Ajusta exacto a satCount
+      satellites = satellites.slice(0, satCount);
+      satellites.forEach(addSatelliteEntity);
+
+      // Pick default source/destination si no existen
+      if (!sourceNode) sourceNode = satellites[0];
+      if (!destNode) destNode = satellites[satellites.length - 1];
+      recolorSourceDest();
+    }
+
+    function recolorSourceDest() {
+      satellites.forEach(sat => {
+        if (!sat.entity) return;
+        const mat =
+          (sourceNode && sat.id === sourceNode.id) ? Cesium.Color.LIME :
+          (destNode && sat.id === destNode.id) ? Cesium.Color.RED :
+          Cesium.Color.CYAN;
+        sat.entity.point.color = mat;
+      });
+    }
+
+    // =============== CONTACT WINDOWS & GRAPH ===============
+    function calculateLinkQuality(distance, sat1, sat2) {
+      const maxDist = 5_500_000; // 5500 km
+      const distanceFactor = Math.max(0, 1 - (distance / maxDist)); // 0..1
+      const planeDiversity = Math.abs(sat1.plane - sat2.plane) / 2;
+      const altitudeFactor = config.altitude < 600_000 ? 0.85 : 1.0;
+      const q = (distanceFactor * 0.6 + planeDiversity * 0.2 + altitudeFactor * 0.2);
+      return Math.max(0.05, Math.min(1, q));
+    }
+
+    function findOptimalContactWindows(s1, s2, startTime, endTime) {
+      const windows = [];
+      const timeStep = 30;                // seconds
+      const maxDistance = 5_500_000;      // meters
+      let inContact = false;
+      let windowStart = null;
+      let bestDistance = Infinity;
+
+      for (let t = startTime; t <= endTime; t += timeStep) {
+        const p1 = getSatellitePosition(s1.plane, s1.index, s1.meanAnomalyStart, s1.inclination, s1.raan, t);
+        const p2 = getSatellitePosition(s2.plane, s2.index, s2.meanAnomalyStart, s2.inclination, s2.raan, t);
+        const d  = Cesium.Cartesian3.distance(p1, p2);
+
+        if (d <= maxDistance && !inContact) {
+          inContact = true; windowStart = t; bestDistance = d;
+        } else if (inContact) {
+          if (d < bestDistance) bestDistance = d;
+          if (d > maxDistance || t === endTime) {
+            inContact = false;
+            if (windowStart !== null && (t - windowStart) > 30) {
+              windows.push({
+                start: windowStart,
+                end: t,
+                distance: bestDistance,
+                quality: calculateLinkQuality(bestDistance, s1, s2)
+              });
             }
+          }
         }
+      }
+      return windows;
+    }
 
-        function switchTab(tabName) {
-            activeTab = tabName;
-            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            
-            if (tabName === 'contacts') {
-                document.querySelector('.tab:nth-child(1)').classList.add('active');
-                document.getElementById('contactsTab').classList.add('active');
-            } else {
-                document.querySelector('.tab:nth-child(2)').classList.add('active');
-                document.getElementById('collisionsTab').classList.add('active');
-            }
-        }
+    function buildContactGraph() {
+      const t0 = simSeconds();
+      const t1 = t0 + config.planningHorizon;
+      contactGraph = [];
 
-        // ============ BÚSQUEDA OPTIMIZADA DE CONTACTOS ISL ============
-        function findOptimalContactWindows(sat1, sat2, startTime, endTime) {
-            const windows = [];
-            const timeStep = 30;
-            const maxDistance = 5500000; // 5500 km para LEO ISL
-            
-            let inContact = false;
-            let windowStart = null;
-            let windowDistance = 0;
-            let bestDistance = Infinity;
+      // Limpia enlaces visuales previos
+      linkEntities.forEach(e => viewer.entities.remove(e));
+      linkEntities = [];
 
-            for (let t = startTime; t <= endTime; t += timeStep) {
-                const tempTime = t;
-                simulationTime = tempTime;
-                
-                const pos1 = getSatellitePosition(sat1.plane, sat1.index, sat1.meanAnomalyStart, sat1.inclination, sat1.raan);
-                const pos2 = getSatellitePosition(sat2.plane, sat2.index, sat2.meanAnomalyStart, sat2.inclination, sat2.raan);
-                
-                const distance = Cesium.Cartesian3.distance(pos1, pos2);
-                
-                // Para ISL solo importa la distancia directa
-                if (distance <= maxDistance && !inContact) {
-                    inContact = true;
-                    windowStart = t;
-                    windowDistance = distance;
-                    bestDistance = distance;
-                } else if (inContact) {
-                    if (distance < bestDistance) {
-                        bestDistance = distance;
-                        windowDistance = distance;
-                    }
-                    
-                    if (distance > maxDistance || t === endTime) {
-                        inContact = false;
-                        if (windowStart !== null && (t - windowStart) > 30) {
-                            windows.push({
-                                start: windowStart,
-                                end: t,
-                                distance: windowDistance,
-                                quality: calculateLinkQuality(windowDistance, sat1, sat2)
-                            });
-                        }
-                    }
-                }
-            }
+      for (let i = 0; i < satellites.length; i++) {
+        for (let j = i + 1; j < satellites.length; j++) {
+          const s1 = satellites[i], s2 = satellites[j];
+          const wins = findOptimalContactWindows(s1, s2, t0, t1);
+          wins.forEach((w, k) => {
+            const owlt = w.distance / C; // one-way light time
+            const setup_s = 0.2 + (1 - w.quality) * 0.6; // pequeño overhead dependiente de calidad
+            const type = (config.altitude < 600_000 && w.distance < 3_000_000) ? 'optical' : 'rf';
 
-            simulationTime = startTime;
-            return windows;
-        }
+            // id único estable
+            const idF = `C_${s1.id}_${s2.id}_${Math.round(w.start)}`;
+            const idB = `C_${s2.id}_${s1.id}_${Math.round(w.start)}`;
 
-        function calculateLinkQuality(distance, sat1, sat2) {
-            const maxDist = 5500000;
-            const distanceFactor = 1 - (distance / maxDist);
-            const planeDiversity = Math.abs(sat1.plane - sat2.plane) / 2;
-            return (distanceFactor * 0.7 + planeDiversity * 0.3);
-        }
-
-        // ============ DETECCIÓN DE COLISIONES ============
-        function detectCollisions() {
-            collisionWarnings = [];
-            const safeDistance = config.safeDistance;
-            
-            for (let i = 0; i < satellites.length; i++) {
-                for (let j = i + 1; j < satellites.length; j++) {
-                    const sat1 = satellites[i];
-                    const sat2 = satellites[j];
-                    
-                    const pos1 = sat1.entity.position.getValue(viewer.clock.currentTime || Cesium.JulianDate.now());
-                    const pos2 = sat2.entity.position.getValue(viewer.clock.currentTime || Cesium.JulianDate.now());
-                    
-                    if (!pos1 || !pos2) continue;
-                    
-                    const distance = Cesium.Cartesian3.distance(pos1, pos2) / 1000;
-                    
-                    if (distance < safeDistance) {
-                        const vel1 = calculateOrbitalVelocityVector(sat1);
-                        const vel2 = calculateOrbitalVelocityVector(sat2);
-                        
-                        const relVel = Cesium.Cartesian3.subtract(vel1, vel2, new Cesium.Cartesian3());
-                        const relativeVelocity = Cesium.Cartesian3.magnitude(relVel) / 1000;
-                        
-                        const timeToClosestApproach = predictClosestApproach(sat1, sat2);
-                        const riskLevel = calculateCollisionRisk(distance, relativeVelocity, safeDistance);
-                        
-                        collisionWarnings.push({
-                            sat1: `SAT-${sat1.id}`,
-                            sat2: `SAT-${sat2.id}`,
-                            distance: distance.toFixed(2),
-                            relativeVelocity: relativeVelocity.toFixed(2),
-                            timeToCA: timeToClosestApproach,
-                            riskLevel: riskLevel,
-                            probability: calculateCollisionProbability(distance, safeDistance)
-                        });
-                    }
-                }
-            }
-            
-            updateCollisionDisplay();
-        }
-
-        function calculateOrbitalVelocityVector(sat) {
-            const r = EARTH_RADIUS + config.altitude;
-            const v = Math.sqrt(GM / r);
-            
-            const pos = getSatellitePosition(sat.plane, sat.index, sat.meanAnomalyStart, sat.inclination, sat.raan);
-            
-            const dt = 0.1;
-            simulationTime += dt;
-            const posNext = getSatellitePosition(sat.plane, sat.index, sat.meanAnomalyStart, sat.inclination, sat.raan);
-            simulationTime -= dt;
-            
-            const velocity = Cesium.Cartesian3.subtract(posNext, pos, new Cesium.Cartesian3());
-            Cesium.Cartesian3.divideByScalar(velocity, dt, velocity);
-            
-            return velocity;
-        }
-
-        function predictClosestApproach(sat1, sat2) {
-            let minDistance = Infinity;
-            let timeToCA = 0;
-            const lookAhead = 3600;
-            const step = 60;
-            
-            for (let dt = 0; dt < lookAhead; dt += step) {
-                const futureTime = simulationTime + dt;
-                const oldTime = simulationTime;
-                simulationTime = futureTime;
-                
-                const pos1 = getSatellitePosition(sat1.plane, sat1.index, sat1.meanAnomalyStart, sat1.inclination, sat1.raan);
-                const pos2 = getSatellitePosition(sat2.plane, sat2.index, sat2.meanAnomalyStart, sat2.inclination, sat2.raan);
-                
-                const distance = Cesium.Cartesian3.distance(pos1, pos2);
-                
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    timeToCA = dt;
-                }
-                
-                simulationTime = oldTime;
-            }
-            
-            return timeToCA;
-        }
-
-        function calculateCollisionRisk(distance, relativeVel, safeDistance) {
-            const distanceRisk = 1 - (distance / safeDistance);
-            const velocityRisk = Math.min(relativeVel / 15, 1);
-            const risk = (distanceRisk * 0.6 + velocityRisk * 0.4);
-            
-            if (risk > 0.7) return 'CRITICAL';
-            if (risk > 0.4) return 'HIGH';
-            if (risk > 0.2) return 'MEDIUM';
-            return 'LOW';
-        }
-
-        function calculateCollisionProbability(distance, safeDistance) {
-            const ratio = distance / safeDistance;
-            if (ratio > 1) return 0;
-            return (1 - ratio) * 100;
-        }
-
-        function updateCollisionDisplay() {
-            const statusDiv = document.getElementById('collisionStatus');
-            const listDiv = document.getElementById('collisionsList');
-            
-            if (collisionWarnings.length === 0) {
-                statusDiv.innerHTML = `
-                    <div class="collision-safe">
-                        <strong>Estado: SEGURO</strong><br>
-                        No se detectaron riesgos de colisión inmediatos
-                    </div>
-                `;
-                listDiv.innerHTML = '<p style="text-align:center; color:#94a3b8;">No hay alertas de colisión</p>';
-            } else {
-                const criticalCount = collisionWarnings.filter(w => w.riskLevel === 'CRITICAL').length;
-                const highCount = collisionWarnings.filter(w => w.riskLevel === 'HIGH').length;
-                
-                statusDiv.innerHTML = `
-                    <div class="collision-warning">
-                        <strong>ADVERTENCIA DE COLISIÓN</strong><br>
-                        ${collisionWarnings.length} riesgo(s) detectado(s)<br>
-                        <small>Críticos: ${criticalCount} | Altos: ${highCount}</small>
-                    </div>
-                `;
-                
-                listDiv.innerHTML = '';
-                collisionWarnings.forEach(warning => {
-                    const div = document.createElement('div');
-                    div.className = 'contact-window';
-                    div.style.borderLeftColor = warning.riskLevel === 'CRITICAL' ? '#ef4444' : 
-                                                 warning.riskLevel === 'HIGH' ? '#f59e0b' : '#fbbf24';
-                    div.innerHTML = `
-                        <div class="contact-info">
-                            <span class="contact-label"><strong>${warning.sat1} - ${warning.sat2}</strong></span>
-                            <span class="contact-value" style="color: ${warning.riskLevel === 'CRITICAL' ? '#ef4444' : '#f59e0b'}">${warning.riskLevel}</span>
-                        </div>
-                        <div class="contact-info">
-                            <span class="contact-label">Distancia:</span>
-                            <span class="contact-value">${warning.distance} km</span>
-                        </div>
-                        <div class="contact-info">
-                            <span class="contact-label">Vel. Relativa:</span>
-                            <span class="contact-value">${warning.relativeVelocity} km/s</span>
-                        </div>
-                        <div class="contact-info">
-                            <span class="contact-label">Tiempo a CA:</span>
-                            <span class="contact-value">${Math.floor(warning.timeToCA / 60)} min</span>
-                        </div>
-                        <div class="contact-info">
-                            <span class="contact-label">Prob. Colisión:</span>
-                            <span class="contact-value">${warning.probability.toFixed(1)}%</span>
-                        </div>
-                    `;
-                    listDiv.appendChild(div);
-                });
-            }
-        }
-
-        // ============ CGR CLÁSICO ============
-        function cgrClassicSearch(src, dst, t0, bundle_bytes) {
-            const distances = {};
-            const arrivalTimes = {};
-            const previous = {};
-            const unvisited = new Set();
-            
-            contactGraph.forEach((c, idx) => {
-                distances[idx] = Infinity;
-                arrivalTimes[idx] = t0;
-                previous[idx] = null;
-                unvisited.add(idx);
+            contactGraph.push({
+              id: idF, from: s1.id, to: s2.id,
+              t_start: w.start, t_end: w.end,
+              owlt, setup_s, type, quality: w.quality
             });
-            
-            contactGraph.forEach((c, idx) => {
-                if (c.from !== src) return;
-                const eta = t0 + c.owlt + c.setup_s;
-                if (eta > c.t_end) return;
-                distances[idx] = eta - t0;
-                arrivalTimes[idx] = eta;
-            });
-            
-            let best_end = null;
-            let best_eta = Infinity;
-            
-            while (unvisited.size > 0) {
-                let current_idx = null;
-                let min_dist = Infinity;
-                
-                unvisited.forEach(idx => {
-                    if (distances[idx] < min_dist) {
-                        min_dist = distances[idx];
-                        current_idx = idx;
-                    }
-                });
-                
-                if (current_idx === null || min_dist === Infinity) break;
-                unvisited.delete(current_idx);
-                
-                const current = contactGraph[current_idx];
-                const current_arrival = arrivalTimes[current_idx];
-                
-                if (current.to === dst) {
-                    best_end = current_idx;
-                    best_eta = current_arrival;
-                    break;
-                }
-                
-                contactGraph.forEach((neighbor, nj) => {
-                    if (!unvisited.has(nj)) return;
-                    if (neighbor.from !== current.to) return;
-                    
-                    const eta_n = current_arrival + neighbor.owlt + neighbor.setup_s;
-                    if (eta_n > neighbor.t_end) return;
-                    
-                    const new_dist = eta_n - t0;
-                    
-                    if (new_dist < distances[nj]) {
-                        distances[nj] = new_dist;
-                        arrivalTimes[nj] = eta_n;
-                        previous[nj] = current_idx;
-                    }
-                });
-            }
-            
-            if (best_end === null) {
-                return { found: false, eta: Infinity, latency: Infinity, hops: 0, contact_ids: [], nodes: [] };
-            }
-            
-            const path = [];
-            const nodes = [];
-            let cur = best_end;
-            while (cur !== null) {
-                path.unshift(contactGraph[cur].id);
-                nodes.unshift(contactGraph[cur].from);
-                cur = previous[cur];
-            }
-            nodes.push(dst);
-            
-            return {
-                found: true,
-                eta: best_eta,
-                latency: best_eta - t0,
-                hops: path.length,
-                contact_ids: path,
-                nodes: nodes
-            };
-        }
-
-        // ============ CGR ENHANCED ============
-        function cgrEnhancedSearch(src, dst, t0, bundle_bytes) {
-            const distances = {};
-            const arrivalTimes = {};
-            const previous = {};
-            const unvisited = new Set();
-            
-            contactGraph.forEach((c, idx) => {
-                distances[idx] = Infinity;
-                arrivalTimes[idx] = t0;
-                previous[idx] = null;
-                unvisited.add(idx);
-            });
-            
-            contactGraph.forEach((c, idx) => {
-                if (c.from !== src) return;
-                
-                if (!contactIsViable(c, t0, bundle_bytes)) return;
-                
-                let effective_setup = c.setup_s;
-                if (edgeStates[idx]) {
-                    effective_setup += 1.0 * edgeStates[idx].penalty_s;
-                }
-                
-                const eta = calculateETA({...c, setup_s: effective_setup}, t0, bundle_bytes);
-                if (eta === Infinity) return;
-                
-                distances[idx] = eta - t0;
-                arrivalTimes[idx] = eta;
-            });
-            
-            let best_end = null;
-            let best_eta = Infinity;
-            
-            while (unvisited.size > 0) {
-                let current_idx = null;
-                let min_dist = Infinity;
-                
-                unvisited.forEach(idx => {
-                    if (distances[idx] < min_dist) {
-                        min_dist = distances[idx];
-                        current_idx = idx;
-                    }
-                });
-                
-                if (current_idx === null || min_dist === Infinity) break;
-                unvisited.delete(current_idx);
-                
-                const current = contactGraph[current_idx];
-                const current_arrival = arrivalTimes[current_idx];
-                
-                if (current.to === dst) {
-                    best_end = current_idx;
-                    best_eta = current_arrival;
-                    break;
-                }
-                
-                contactGraph.forEach((neighbor, nj) => {
-                    if (!unvisited.has(nj)) return;
-                    if (neighbor.from !== current.to) return;
-                    
-                    if (!contactIsViable(neighbor, current_arrival, bundle_bytes)) return;
-                    
-                    let effective_setup = neighbor.setup_s;
-                    if (edgeStates[nj]) {
-                        effective_setup += 1.0 * edgeStates[nj].penalty_s;
-                    }
-                    
-                    const eta_n = calculateETA({...neighbor, setup_s: effective_setup}, current_arrival, bundle_bytes);
-                    if (eta_n === Infinity) return;
-                    
-                    const new_dist = eta_n - t0;
-                    
-                    if (new_dist < distances[nj]) {
-                        distances[nj] = new_dist;
-                        arrivalTimes[nj] = eta_n;
-                        previous[nj] = current_idx;
-                    }
-                });
-            }
-            
-            if (best_end === null) {
-                return { found: false, eta: Infinity, latency: Infinity, hops: 0, contact_ids: [], nodes: [] };
-            }
-            
-            const path = [];
-            const nodes = [];
-            let cur = best_end;
-            while (cur !== null) {
-                path.unshift(contactGraph[cur].id);
-                nodes.unshift(contactGraph[cur].from);
-                cur = previous[cur];
-            }
-            nodes.push(dst);
-            
-            return {
-                found: true,
-                eta: best_eta,
-                latency: best_eta - t0,
-                hops: path.length,
-                contact_ids: path,
-                nodes: nodes
-            };
-        }
-
-        function contactIsViable(contact, t_arrival, bundle_bytes) {
-            if (t_arrival > contact.t_end) return false;
-            
-            const start_tx = Math.max(t_arrival, contact.t_start);
-            const window = contact.t_end - start_tx - contact.setup_s;
-            if (window <= 0) return false;
-            
-            const rate = Math.max(contact.rate_bps, 1.0);
-            const cap_window = window * rate / 8;
-            const cap_actual = Math.min(contact.residual_bytes, cap_window);
-            
-            if (cap_actual < bundle_bytes) return false;
-            
-            const tx_time = bundle_bytes / (rate / 8);
-            const finish = start_tx + contact.setup_s + tx_time;
-            if (finish > contact.t_end) return false;
-            
-            return true;
-        }
-
-        function calculateETA(contact, t_in, bundle_bytes) {
-            if (!contactIsViable(contact, t_in, bundle_bytes)) return Infinity;
-            
-            const start_tx = Math.max(t_in, contact.t_start);
-            const rate = Math.max(contact.rate_bps, 1.0) / 8;
-            const tx_time = bundle_bytes / rate;
-            
-            const finish = start_tx + contact.setup_s + tx_time;
-            const eta = finish + contact.owlt;
-            
-            return eta;
-        }
-
-        // ============ SELECCIÓN AUTOMÁTICA DE ALGORITMO ============
-        function selectBestAlgorithm() {
-            if (config.routingAlgorithm !== 'auto') {
-                return config.routingAlgorithm === 'cgr-enhanced' ? 'enhanced' : 'classic';
-            }
-            
-            if (performanceStats.classic === 0 && performanceStats.enhanced === 0) {
-                return 'enhanced';
-            }
-            
-            return performanceStats.enhanced <= performanceStats.classic * 1.2 ? 'enhanced' : 'classic';
-        }
-
-        // ============ RECÁLCULO DINÁMICO DE RUTAS ============
-        function replanRoute() {
-            if (satellites.length < 2) return;
-
-            const t0 = simulationTime;
-            const bundle_bytes = config.bundleSize;
-            
-            const startClassic = performance.now();
-            const routeClassic = cgrClassicSearch(sourceNode.id, destNode.id, t0, bundle_bytes);
-            performanceStats.classic = performance.now() - startClassic;
-            
-            const startEnhanced = performance.now();
-            const routeEnhanced = cgrEnhancedSearch(sourceNode.id, destNode.id, t0, bundle_bytes);
-            performanceStats.enhanced = performance.now() - startEnhanced;
-            
-            const selectedAlgo = selectBestAlgorithm();
-            const route = selectedAlgo === 'enhanced' ? routeEnhanced : routeClassic;
-            
-            document.getElementById('activeAlgo').textContent = 
-                selectedAlgo === 'enhanced' ? 'CGR Enhanced' : 'CGR Clásico';
-            document.getElementById('calcTime').textContent = 
-                `${(selectedAlgo === 'enhanced' ? performanceStats.enhanced : performanceStats.classic).toFixed(2)} ms`;
-
-            if (route && route.found) {
-                currentRoute = route;
-                visualizeRoute(route);
-                
-                if (routeClassic.found && routeEnhanced.found) {
-                    const improvement = ((routeClassic.latency - routeEnhanced.latency) / routeClassic.latency * 100);
-                    document.getElementById('efficiency').textContent = 
-                        `${improvement > 0 ? '+' : ''}${improvement.toFixed(1)}%`;
-                }
-            }
-
-            lastRecalcTime = simulationTime;
-            document.getElementById('lastRecalc').textContent = `${simulationTime.toFixed(1)} s`;
-            updateMetrics();
-            displayAlternativeRoutes();
-        }
-
-        function manualRecalc() {
-            buildContactGraph();
-            replanRoute();
-        }
-
-        // ============ K RUTAS YEN-LITE ============
-        function kYenRoutes(src, dst, t0, bundle_bytes, k) {
-            const routes = [];
-            const selectedAlgo = selectBestAlgorithm();
-            
-            const base = selectedAlgo === 'enhanced' ?
-                         cgrEnhancedSearch(src, dst, t0, bundle_bytes) :
-                         cgrClassicSearch(src, dst, t0, bundle_bytes);
-            if (base.found) routes.push(base);
-            
-            for (let i = 1; i < k && routes.length < k; i++) {
-                let best_alt = null;
-                
-                routes.forEach(ref_route => {
-                    for (let spur = 0; spur < ref_route.hops; spur++) {
-                        const banned_id = ref_route.contact_ids[spur];
-                        const temp_graph = contactGraph.filter(c => c.id !== banned_id);
-                        
-                        const old_graph = contactGraph;
-                        contactGraph = temp_graph;
-                        const alt = selectedAlgo === 'enhanced' ?
-                                   cgrEnhancedSearch(src, dst, t0, bundle_bytes) :
-                                   cgrClassicSearch(src, dst, t0, bundle_bytes);
-                        contactGraph = old_graph;
-                        
-                        if (!alt.found) continue;
-                        
-                        const is_dup = routes.some(r => 
-                            r.hops === alt.hops && 
-                            r.contact_ids.every((id, j) => id === alt.contact_ids[j])
-                        );
-                        
-                        if (is_dup) continue;
-                        
-                        if (!best_alt || alt.eta < best_alt.eta) {
-                            best_alt = alt;
-                        }
-                    }
-                });
-                
-                if (best_alt) routes.push(best_alt);
-                else break;
-            }
-            
-            return routes;
-        }
-
-        // ============ CREACIÓN DE CONSTELACIÓN ============
-        function createConstellation() {
-            satellites.forEach(sat => viewer.entities.remove(sat.entity));
-            linkEntities.forEach(link => viewer.entities.remove(link));
-            routeEntities.forEach(route => viewer.entities.remove(route));
-            
-            satellites = [];
-            linkEntities = [];
-            routeEntities = [];
-            contactGraph = [];
-            edgeStates = [];
-
-            const numPlanes = 3;
-            const satsPerPlane = config.satCount / numPlanes;
-            const inclination = 53;
-
-            for (let plane = 0; plane < numPlanes; plane++) {
-                const raan = (plane * 360) / numPlanes;
-                
-                for (let sat = 0; sat < satsPerPlane; sat++) {
-                    const meanAnomalyStart = (sat * 360) / satsPerPlane;
-                    const satIndex = plane * satsPerPlane + sat;
-                    
-                    const satEntity = viewer.entities.add({
-                        name: `SAT-${satIndex}`,
-                        position: new Cesium.CallbackProperty(() => {
-                            return getSatellitePosition(plane, sat, meanAnomalyStart, inclination, raan);
-                        }, false),
-                        point: {
-                            pixelSize: 10,
-                            color: Cesium.Color.CYAN,
-                            outlineColor: Cesium.Color.WHITE,
-                            outlineWidth: 2
-                        }
-                    });
-
-                    satellites.push({
-                        id: satIndex,
-                        entity: satEntity,
-                        plane: plane,
-                        index: sat,
-                        meanAnomalyStart: meanAnomalyStart,
-                        inclination: inclination,
-                        raan: raan
-                    });
-                }
-            }
-
-            sourceNode = satellites[Math.floor(Math.random() * satellites.length)];
-            destNode = satellites[Math.floor(Math.random() * satellites.length)];
-            
-            while (sourceNode.id === destNode.id) {
-                destNode = satellites[Math.floor(Math.random() * satellites.length)];
-            }
-            
-            sourceNode.entity.point.color = Cesium.Color.LIME;
-            sourceNode.entity.point.pixelSize = 14;
-            destNode.entity.point.color = Cesium.Color.RED;
-            destNode.entity.point.pixelSize = 14;
-
-            buildContactGraph();
-            replanRoute();
-        }
-
-        function getSatellitePosition(plane, sat, meanAnomalyStart, inclination, raan) {
-            const orbitalPeriod = 6000;
-            const meanMotion = (2 * Math.PI) / orbitalPeriod;
-            const meanAnomaly = meanAnomalyStart + (meanMotion * simulationTime * config.simSpeed * 180 / Math.PI);
-            
-            const a = EARTH_RADIUS + config.altitude;
-            const incRad = Cesium.Math.toRadians(inclination);
-            const raanRad = Cesium.Math.toRadians(raan);
-            const maRad = Cesium.Math.toRadians(meanAnomaly);
-
-            const x = a * (Math.cos(raanRad) * Math.cos(maRad) - Math.sin(raanRad) * Math.sin(maRad) * Math.cos(incRad));
-            const y = a * (Math.sin(raanRad) * Math.cos(maRad) + Math.cos(raanRad) * Math.sin(maRad) * Math.cos(incRad));
-            const z = a * Math.sin(maRad) * Math.sin(incRad);
-
-            return new Cesium.Cartesian3(x, y, z);
-        }
-
-        // ============ CONSTRUCCIÓN DEL GRAFO DE CONTACTOS ============
-        function buildContactGraph() {
-            contactGraph = [];
-            linkEntities.forEach(link => viewer.entities.remove(link));
-            linkEntities = [];
-
-            const currentTime = simulationTime;
-            const horizonEnd = currentTime + config.planningHorizon;
-
-            let contact_id = 0;
-
-            satellites.forEach((sat1, i) => {
-                satellites.forEach((sat2, j) => {
-                    if (i >= j) return;
-
-                    const windows = findOptimalContactWindows(sat1, sat2, currentTime, horizonEnd);
-                    
-                    windows.forEach(window => {
-                        const distance = window.distance;
-                        const isOptical = distance < 2800000;
-                        const bandwidth = isOptical ? 200e6 : 25e6;
-                        const latency = (distance / 299792458);
-                        const reliability = isOptical ? 0.98 : 0.90;
-                        const residual_bytes = (isOptical ? 800 : 150) * 1e6;
-
-                        contactGraph.push({
-                            id: contact_id++,
-                            from: sat1.id,
-                            to: sat2.id,
-                            t_start: window.start,
-                            t_end: window.end,
-                            distance: distance,
-                            type: isOptical ? 'optical' : 'rf',
-                            rate_bps: bandwidth,
-                            owlt: latency,
-                            setup_s: 0.05,
-                            residual_bytes: residual_bytes,
-                            reliability: reliability,
-                            quality: window.quality
-                        });
-
-                        if (window.start <= currentTime && window.end >= currentTime) {
-                            const color = isOptical ? 
-                                Cesium.Color.CYAN.withAlpha(0.4) :
-                                Cesium.Color.ORANGE.withAlpha(0.3);
-
-                            const link = viewer.entities.add({
-                                polyline: {
-                                    positions: new Cesium.CallbackProperty(() => {
-                                        const time = viewer.clock.currentTime || Cesium.JulianDate.now();
-                                        return [
-                                            sat1.entity.position.getValue(time),
-                                            sat2.entity.position.getValue(time)
-                                        ];
-                                    }, false),
-                                    width: isOptical ? 2 : 1,
-                                    material: color
-                                }
-                            });
-                            linkEntities.push(link);
-                        }
-                    });
-                });
+            contactGraph.push({
+              id: idB, from: s2.id, to: s1.id,
+              t_start: w.start, t_end: w.end,
+              owlt, setup_s, type, quality: w.quality
             });
 
-            updateContactList();
-            updateMetrics();
-            detectCollisions();
-        }
-
-        // ============ VISUALIZAR RUTA ============
-        function visualizeRoute(route) {
-            routeEntities.forEach(e => viewer.entities.remove(e));
-            routeEntities = [];
-
-            if (!route || !route.found || route.hops === 0) return;
-
-            for (let i = 0; i < route.contact_ids.length; i++) {
-                const contact_id = route.contact_ids[i];
-                const contact = contactGraph.find(c => c.id === contact_id);
-                if (!contact) continue;
-
-                const sat1 = satellites.find(s => s.id === contact.from);
-                const sat2 = satellites.find(s => s.id === contact.to);
-                if (!sat1 || !sat2) continue;
-
-                const routeEntity = viewer.entities.add({
-                    name: `ROUTE-${i}`,
-                    polyline: {
-                        positions: new Cesium.CallbackProperty(() => {
-                            const time = viewer.clock.currentTime || Cesium.JulianDate.now();
-                            return [
-                                sat1.entity.position.getValue(time),
-                                sat2.entity.position.getValue(time)
-                            ];
-                        }, false),
-                        width: 6,
-                        material: new Cesium.PolylineGlowMaterialProperty({
-                            glowPower: 0.5,
-                            color: Cesium.Color.LIME
-                        })
-                    }
-                });
-                routeEntities.push(routeEntity);
-            }
-        }
-
-        // ============ ACTUALIZAR MÉTRICAS ============
-        function updateMetrics() {
-            const activeLinks = contactGraph.filter(c => 
-                simulationTime >= c.t_start && simulationTime < c.t_end
-            ).length;
-            document.getElementById('activeContacts').textContent = activeLinks;
-
-            if (currentRoute && currentRoute.found) {
-                document.getElementById('routeLatency').textContent = `${currentRoute.latency.toFixed(3)} s`;
-                document.getElementById('routeHops').textContent = currentRoute.hops;
-            } else {
-                document.getElementById('routeLatency').textContent = '-';
-                document.getElementById('routeHops').textContent = '0';
-            }
-        }
-
-        // ============ MOSTRAR RUTAS ALTERNATIVAS ============
-        function displayAlternativeRoutes() {
-            const container = document.getElementById('alternativeRoutes');
-            container.innerHTML = '';
-
-            const routes = kYenRoutes(sourceNode.id, destNode.id, simulationTime, config.bundleSize, config.kRoutes);
-
-            routes.forEach((route, idx) => {
-                const div = document.createElement('div');
-                div.className = 'route-step';
-                div.innerHTML = `
-                    <strong>Ruta #${idx + 1}</strong><br>
-                    Latencia: ${route.latency.toFixed(3)} s | Saltos: ${route.hops}
-                `;
-                container.appendChild(div);
+            // Dibuja enlace (callback para que se mueva)
+            const ent = viewer.entities.add({
+              polyline: {
+                positions: new Cesium.CallbackProperty(() => {
+                  const t = simSeconds();
+                  const p1 = getSatellitePosition(s1.plane, s1.index, s1.meanAnomalyStart, s1.inclination, s1.raan, t);
+                  const p2 = getSatellitePosition(s2.plane, s2.index, s2.meanAnomalyStart, s2.inclination, s2.raan, t);
+                  return [p1, p2];
+                }, false),
+                width: 1.0,
+                material: Cesium.Color.fromCssColorString(type === 'optical' ? '#a855f7' : '#06b6d4').withAlpha(0.25)
+              }
             });
+            linkEntities.push(ent);
+          });
         }
+      }
 
-        // ============ ACTUALIZAR LISTA DE CONTACTOS ============
-        function updateContactList() {
-            const container = document.getElementById('contactWindows');
-            container.innerHTML = '';
+      updateContactWindowsList();
+    }
 
-            const relevantContacts = contactGraph
-                .filter(c => c.t_start < simulationTime + config.planningHorizon)
-                .sort((a, b) => a.t_start - b.t_start)
-                .slice(0, 10);
+    function updateContactWindowsList() {
+      const list = document.getElementById('contactWindows');
+      list.innerHTML = '';
+      const nowSec = simSeconds();
+      // Muestra 10 ventanas activas o próximas
+      const soon = contactGraph
+        .filter(c => c.t_end >= nowSec)
+        .sort((a, b) => a.t_start - b.t_start)
+        .slice(0, 10);
 
-            relevantContacts.forEach(contact => {
-                const isActive = simulationTime >= contact.t_start && simulationTime < contact.t_end;
-                const isExpired = simulationTime >= contact.t_end;
-                
-                const sat1 = satellites.find(s => s.id === contact.from);
-                const sat2 = satellites.find(s => s.id === contact.to);
+      soon.forEach(c => {
+        const div = document.createElement('div');
+        div.className = 'contact-window';
+        const active = nowSec >= c.t_start && nowSec < c.t_end;
+        if (active) div.classList.add('active');
+        div.innerHTML = `
+          <div class="contact-info"><span class="contact-label"><strong>${c.from} → ${c.to}</strong></span><span class="contact-value">${c.type.toUpperCase()}</span></div>
+          <div class="contact-info"><span class="contact-label">Start:</span><span class="contact-value">${(c.t_start - nowSec).toFixed(0)} s</span></div>
+          <div class="contact-info"><span class="contact-label">End:</span><span class="contact-value">${(c.t_end - nowSec).toFixed(0)} s</span></div>
+          <div class="contact-info"><span class="contact-label">OWLT:</span><span class="contact-value">${(c.owlt*1000).toFixed(1)} ms</span></div>
+          <div class="contact-info"><span class="contact-label">Q:</span><span class="contact-value">${(c.quality).toFixed(2)}</span></div>
+        `;
+        list.appendChild(div);
+      });
+    }
 
-                const div = document.createElement('div');
-                div.className = `contact-window ${isActive ? 'active' : ''} ${isExpired ? 'expired' : ''}`;
-                div.innerHTML = `
-                    <div class="contact-info">
-                        <span class="contact-label">Enlace ${contact.id}:</span>
-                        <span class="contact-value">SAT-${sat1?.id || 'N/A'} → SAT-${sat2?.id || 'N/A'}</span>
-                    </div>
-                    <div class="contact-info">
-                        <span class="contact-label">Ventana:</span>
-                        <span class="contact-value">[${contact.t_start.toFixed(0)}s, ${contact.t_end.toFixed(0)}s]</span>
-                    </div>
-                    <div class="contact-info">
-                        <span class="contact-label">Tipo:</span>
-                        <span class="contact-value">${contact.type === 'optical' ? 'Optical' : 'RF'} | ${(contact.rate_bps / 1e6).toFixed(0)} Mbps</span>
-                    </div>
-                `;
-                container.appendChild(div);
+    // =============== COLLISION DETECTION ===============
+    function detectCollisions() {
+      collisionWarnings = [];
+      const safeKm = config.safeDistance / 1000;
+      const t = simSeconds();
+
+      for (let i = 0; i < satellites.length; i++) {
+        for (let j = i + 1; j < satellites.length; j++) {
+          const a = satellites[i], b = satellites[j];
+          const p1 = getSatellitePosition(a.plane, a.index, a.meanAnomalyStart, a.inclination, a.raan, t);
+          const p2 = getSatellitePosition(b.plane, b.index, b.meanAnomalyStart, b.inclination, b.raan, t);
+          const dKm = Cesium.Cartesian3.distance(p1, p2) / 1000;
+          if (dKm < safeKm) {
+            collisionWarnings.push({
+              sat1: `SAT-${a.id}`,
+              sat2: `SAT-${b.id}`,
+              distance: dKm.toFixed(2),
+              riskLevel: dKm < safeKm / 2 ? 'CRITICAL' : 'HIGH'
             });
+          }
+        }
+      }
+      updateCollisionDisplay();
+    }
+
+    function updateCollisionDisplay() {
+      const statusDiv = document.getElementById('collisionStatus');
+      const listDiv = document.getElementById('collisionsList');
+      if (collisionWarnings.length === 0) {
+        statusDiv.innerHTML = `<div class="collision-safe"><strong>✓ Status: SAFE</strong><br>No collision risks detected</div>`;
+        listDiv.innerHTML = '<p style="text-align:center; color:#94a3b8;">No active collision alerts</p>';
+      } else {
+        statusDiv.innerHTML = `<div class="collision-warning"><strong>⚠️ COLLISION WARNING</strong><br>${collisionWarnings.length} potential risk(s) detected</div>`;
+        listDiv.innerHTML = '';
+        collisionWarnings.forEach(w => {
+          const div = document.createElement('div');
+          div.className = 'contact-window';
+          div.style.borderLeftColor = w.riskLevel === 'CRITICAL' ? '#ef4444' : '#f59e0b';
+          div.innerHTML = `
+            <div class="contact-info"><span class="contact-label"><strong>${w.sat1} - ${w.sat2}</strong></span><span class="contact-value" style="color:${w.riskLevel==='CRITICAL'?'#ef4444':'#f59e0b'}">${w.riskLevel}</span></div>
+            <div class="contact-info"><span class="contact-label">Distance:</span><span class="contact-value">${w.distance} km</span></div>
+          `;
+          listDiv.appendChild(div);
+        });
+      }
+    }
+
+    // =============== CGR CLASSIC & ENHANCED ===============
+    function cgrClassicSearch(srcId, dstId, t0, bundle_bytes) {
+      const distances = {};
+      const arrivalTimes = {};
+      const previous = {};
+      const unvisited = new Set();
+      const contacts = contactGraph;
+
+      for (let i = 0; i < contacts.length; i++) {
+        distances[i] = Infinity;
+        arrivalTimes[i] = t0;
+        previous[i] = null;
+        unvisited.add(i);
+      }
+
+      // Inicializa contactos desde src
+      contacts.forEach((c, idx) => {
+        if (c.from === srcId && c.t_start <= t0 && c.t_end > t0) {
+          const eta = t0 + c.owlt + c.setup_s;
+          if (eta <= c.t_end) {
+            distances[idx] = eta - t0;
+            arrivalTimes[idx] = eta;
+          }
+        }
+      });
+
+      let best_end = null;
+      let best_eta = Infinity;
+
+      while (unvisited.size > 0) {
+        let current_idx = null;
+        let min_dist = Infinity;
+        unvisited.forEach(idx => {
+          if (distances[idx] < min_dist) { min_dist = distances[idx]; current_idx = idx; }
+        });
+        if (current_idx === null || min_dist === Infinity) break;
+        unvisited.delete(current_idx);
+
+        const current = contacts[current_idx];
+        if (current.to === dstId) {
+          best_end = current_idx;
+          best_eta = arrivalTimes[current_idx];
+          break;
         }
 
-        // ============ COMPARACIÓN DE ALGORITMOS ============
-        function runComparison() {
-            const t0 = simulationTime;
-            const bundle_bytes = config.bundleSize;
+        contacts.forEach((n, nj) => {
+          if (!unvisited.has(nj)) return;
+          if (n.from !== current.to) return;
+          if (n.t_start > arrivalTimes[current_idx]) return;
+          if (n.t_end <= arrivalTimes[current_idx]) return;
+          const eta_n = arrivalTimes[current_idx] + n.owlt + n.setup_s;
+          if (eta_n > n.t_end) return;
 
-            const baseline = cgrClassicSearch(sourceNode.id, destNode.id, t0, bundle_bytes);
-            const enhanced = cgrEnhancedSearch(sourceNode.id, destNode.id, t0, bundle_bytes);
+          const new_dist = eta_n - t0;
+          if (new_dist < distances[nj]) {
+            distances[nj] = new_dist;
+            arrivalTimes[nj] = eta_n;
+            previous[nj] = current_idx;
+          }
+        });
+      }
 
-            alert(`Comparación de Algoritmos:\n\nCGR Clásico:\n- Latencia: ${baseline.found ? baseline.latency.toFixed(3) + ' s' : 'No route'}\n- Tiempo cálculo: ${performanceStats.classic.toFixed(2)} ms\n\nCGR Enhanced:\n- Latencia: ${enhanced.found ? enhanced.latency.toFixed(3) + ' s' : 'No route'}\n- Tiempo cálculo: ${performanceStats.enhanced.toFixed(2)} ms\n\nMejora: ${baseline.found && enhanced.found ? ((baseline.latency - enhanced.latency) / baseline.latency * 100).toFixed(1) + '%' : 'N/A'}`);
+      if (best_end === null) return { found: false };
+
+      const path = [];
+      const nodes = [dstId];
+      let cur = best_end;
+      while (cur !== null) {
+        path.unshift(contacts[cur].id);
+        if (previous[cur] !== null) nodes.unshift(contacts[cur].from);
+        cur = previous[cur];
+      }
+      return { found: true, eta: best_eta, latency: best_eta - t0, hops: path.length, contact_ids: path, nodes };
+    }
+
+    function cgrEnhancedInternal(srcId, dstId, t0, bundle_bytes) {
+      const contacts = contactGraph;
+      const distances = {};
+      const arrivalTimes = {};
+      const previous = {};
+      const nodeQuality = {};
+      const unvisited = new Set();
+
+      for (let i = 0; i < contacts.length; i++) {
+        distances[i] = Infinity;
+        arrivalTimes[i] = t0;
+        previous[i] = null;
+        nodeQuality[i] = contacts[i].quality || 1.0;
+        unvisited.add(i);
+      }
+
+      // Selección inicial con calidad
+      contacts.forEach((c, idx) => {
+        if (c.from !== srcId) return;
+        if (c.t_start > t0 || c.t_end <= t0) return;
+        const eta = t0 + c.owlt + c.setup_s;
+        if (eta > c.t_end) return;
+        const weighted = (eta - t0) * (2.0 - (c.quality || 1));
+        distances[idx] = weighted;
+        arrivalTimes[idx] = eta;
+      });
+
+      let best_end = null;
+      let best_eta = Infinity;
+      let iterations = 0;
+      const maxIterations = contacts.length * 2;
+
+      while (unvisited.size > 0 && iterations < maxIterations) {
+        iterations++;
+        let current_idx = null;
+        let min_eff = Infinity;
+
+        unvisited.forEach(idx => {
+          const qBoost = nodeQuality[idx] * 0.9;
+          const eff = distances[idx] * qBoost;
+          if (eff < min_eff) { min_eff = eff; current_idx = idx; }
+        });
+
+        if (current_idx === null || distances[current_idx] === Infinity) break;
+        unvisited.delete(current_idx);
+
+        const current = contacts[current_idx];
+        if (current.to === dstId) {
+          best_end = current_idx;
+          best_eta = arrivalTimes[current_idx];
+          break;
         }
 
-        // ============ EVENT LISTENERS ============
-        document.getElementById('satCount').addEventListener('input', (e) => {
-            config.satCount = parseInt(e.target.value);
-            document.getElementById('satCountDisplay').textContent = config.satCount;
-            e.target.style.setProperty('--value', `${((config.satCount - 9) / 27) * 100}%`);
-            createConstellation();
+        contacts.forEach((n, nj) => {
+          if (!unvisited.has(nj)) return;
+          if (n.from !== current.to) return;
+          if (n.t_start > arrivalTimes[current_idx]) return;
+          if (n.t_end <= arrivalTimes[current_idx]) return;
+
+          let effective_setup = n.setup_s;
+          const qDiff = Math.abs((current.quality || 1) - (n.quality || 1));
+          effective_setup += qDiff * 0.2;
+          if (config.altitude < 600_000 && n.type === 'optical') effective_setup *= 0.8;
+
+          const eta_n = arrivalTimes[current_idx] + n.owlt + effective_setup;
+          if (eta_n > n.t_end) return;
+
+          const new_dist = (eta_n - t0) * (2.0 - (n.quality || 1));
+          if (new_dist < distances[nj]) {
+            distances[nj] = new_dist;
+            arrivalTimes[nj] = eta_n;
+            previous[nj] = current_idx;
+            nodeQuality[nj] = (nodeQuality[current_idx] + (n.quality || 1)) / 2;
+          }
         });
+      }
 
-        document.getElementById('altitude').addEventListener('input', (e) => {
-            config.altitude = parseInt(e.target.value) * 1000;
-            document.getElementById('altDisplay').textContent = e.target.value;
-            e.target.style.setProperty('--value', `${((parseInt(e.target.value) - 400) / 800) * 100}%`);
-            createConstellation();
-        });
+      if (best_end === null) return { found: false };
 
-        document.getElementById('simSpeed').addEventListener('input', (e) => {
-            config.simSpeed = parseInt(e.target.value);
-            document.getElementById('speedDisplay').textContent = `${config.simSpeed}x`;
-            e.target.style.setProperty('--value', `${((config.simSpeed - 10) / 190) * 100}%`);
-            viewer.clock.multiplier = config.simSpeed;
-        });
+      const path = [];
+      const nodes = [dstId];
+      let cur = best_end;
+      while (cur !== null) {
+        path.unshift(contacts[cur].id);
+        if (previous[cur] !== null) nodes.unshift(contacts[cur].from);
+        cur = previous[cur];
+      }
+      return { found: true, eta: best_eta, latency: best_eta - t0, hops: path.length, contact_ids: path, nodes };
+    }
 
-        document.getElementById('routingAlgorithm').addEventListener('change', (e) => {
-            config.routingAlgorithm = e.target.value;
-            replanRoute();
-        });
+    function cgrEnhancedSearch(srcId, dstId, t0, bundle_bytes) {
+      // 1) Enhanced
+      let result = cgrEnhancedInternal(srcId, dstId, t0, bundle_bytes);
 
-        document.getElementById('recalcFreq').addEventListener('input', (e) => {
-            config.recalcFreq = parseInt(e.target.value);
-            document.getElementById('recalcDisplay').textContent = config.recalcFreq;
-            e.target.style.setProperty('--value', `${((config.recalcFreq - 1) / 9) * 100}%`);
-        });
+      // 2) Ampliar horizonte si falla
+      if (!result.found) {
+        const oldH = config.planningHorizon;
+        config.planningHorizon = Math.max(oldH, 60 * 60);
+        buildContactGraph();
+        result = cgrEnhancedInternal(srcId, dstId, t0, bundle_bytes);
+        config.planningHorizon = oldH;
+        buildContactGraph(); // restablece grafo al horizonte original
+      }
 
-        document.getElementById('planningHorizon').addEventListener('change', (e) => {
-            config.planningHorizon = parseInt(e.target.value) * 60;
-            buildContactGraph();
-        });
+      // 3) Fallback a Classic
+      if (!result.found) {
+        result = cgrClassicSearch(srcId, dstId, t0, bundle_bytes);
+      }
 
-        document.getElementById('bundleSize').addEventListener('change', (e) => {
-            config.bundleSize = parseInt(e.target.value) * 1e6;
-            replanRoute();
-        });
-
-        document.getElementById('kRoutes').addEventListener('input', (e) => {
-            config.kRoutes = parseInt(e.target.value);
-            document.getElementById('kDisplay').textContent = config.kRoutes;
-            e.target.style.setProperty('--value', `${((config.kRoutes - 1) / 9) * 100}%`);
-        });
-
-        document.getElementById('safeDistance').addEventListener('change', (e) => {
-            config.safeDistance = parseInt(e.target.value) * 1000;
-            detectCollisions();
-        });
-
-        function toggleAnimation() {
-            viewer.clock.shouldAnimate = !viewer.clock.shouldAnimate;
-        }
-
-        function resetView() {
-            viewer.camera.flyHome(1);
-        }
-
-        // ============ ACTUALIZACIÓN CONTINUA CON RECÁLCULO DINÁMICO ============
-        let lastUpdateTime = Date.now();
-        let frameCounter = 0;
-        
-        function smoothUpdate() {
-            const now = Date.now();
-            const deltaTime = (now - lastUpdateTime) / 1000;
-            lastUpdateTime = now;
-            
-            if (viewer.clock.shouldAnimate) {
-                simulationTime += deltaTime * config.simSpeed;
-                frameCounter++;
-                
-                if (frameCounter % 30 === 0) {
-                    updateMetrics();
-                }
-                
-                if (frameCounter % 60 === 0) {
-                    detectCollisions();
-                }
-                
-                if (simulationTime - lastRecalcTime >= config.recalcFreq) {
-                    buildContactGraph();
-                    replanRoute();
-                }
-                
-                if (frameCounter % 300 === 0) {
-                    buildContactGraph();
-                }
+      // 4) Último recurso: fuerza enlace directo más corto en el intervalo (garantiza ruta)
+      if (!result.found) {
+        const t1 = t0 + config.planningHorizon;
+        let best = null;
+        contactGraph.forEach(c => {
+          if (c.from === srcId && c.to === dstId && c.t_end > t0 && c.t_start <= t1) {
+            const start = Math.max(t0, c.t_start);
+            const eta = start + c.owlt + c.setup_s;
+            if (eta <= c.t_end) {
+              const lat = eta - t0;
+              if (!best || lat < best.latency) {
+                best = { found: true, eta, latency: lat, hops: 1, contact_ids: [c.id], nodes: [srcId, dstId] };
+              }
             }
-            
-            requestAnimationFrame(smoothUpdate);
-        }
-        
-        smoothUpdate();
+          }
+        });
+        if (best) result = best;
+      }
 
-        // ============ INICIALIZACIÓN ============
-        viewer.clock.multiplier = config.simSpeed;
-        viewer.clock.shouldAnimate = true;
-        
-        createConstellation();
-        viewer.camera.flyHome(0);
-    </script>
+      return result;
+    }
+
+    function kYenRoutes(srcId, dstId, t0, bundle_bytes, k) {
+      const routes = [];
+      const base = (config.routingAlgorithm === 'cgr-enhanced' || config.routingAlgorithm === 'auto')
+        ? cgrEnhancedSearch(srcId, dstId, t0, bundle_bytes)
+        : cgrClassicSearch(srcId, dstId, t0, bundle_bytes);
+
+      if (!base.found) return routes;
+      routes.push(base);
+
+      // Alternativas removiendo aristas del mejor
+      for (let i = 1; i < k; i++) {
+        const ref = routes[0];
+        let added = false;
+
+        for (let spur = 0; spur < ref.hops && !added; spur++) {
+          const bannedId = ref.contact_ids[spur];
+          const old = contactGraph;
+          contactGraph = old.filter(c => c.id !== bannedId);
+
+          const alt = (config.routingAlgorithm === 'cgr-enhanced' || config.routingAlgorithm === 'auto')
+            ? cgrEnhancedSearch(srcId, dstId, t0, bundle_bytes)
+            : cgrClassicSearch(srcId, dstId, t0, bundle_bytes);
+
+          contactGraph = old;
+
+          if (alt.found) {
+            const isDup = routes.some(r =>
+              r.hops === alt.hops &&
+              r.contact_ids.length === alt.contact_ids.length &&
+              r.contact_ids.every((id, j) => id === alt.contact_ids[j])
+            );
+            if (!isDup) { routes.push(alt); added = true; }
+          }
+        }
+      }
+      return routes;
+    }
+
+    // =============== ROUTE VISUALIZATION ===============
+    function clearRoute() {
+      routeEntities.forEach(e => viewer.entities.remove(e));
+      routeEntities = [];
+    }
+
+    function visualizeRoute(route) {
+      clearRoute();
+      if (!route || !route.found) return;
+
+      // Dibuja las aristas de la ruta (líneas más gruesas/bright)
+      const idToContact = {};
+      contactGraph.forEach(c => idToContact[c.id] = c);
+
+      route.contact_ids.forEach(cid => {
+        const c = idToContact[cid];
+        const s1 = satellites.find(s => s.id === c.from);
+        const s2 = satellites.find(s => s.id === c.to);
+        if (!s1 || !s2) return;
+
+        const ent = viewer.entities.add({
+          polyline: {
+            positions: new Cesium.CallbackProperty(() => {
+              const t = simSeconds();
+              const p1 = getSatellitePosition(s1.plane, s1.index, s1.meanAnomalyStart, s1.inclination, s1.raan, t);
+              const p2 = getSatellitePosition(s2.plane, s2.index, s2.meanAnomalyStart, s2.inclination, s2.raan, t);
+              return [p1, p2];
+            }, false),
+            width: 3.0,
+            material: new Cesium.PolylineGlowMaterialProperty({
+              glowPower: 0.25,
+              color: Cesium.Color.fromCssColorString('#ffffff')
+            })
+          }
+        });
+        routeEntities.push(ent);
+      });
+
+      // Actualiza métricas de ruta
+      document.getElementById('routeLatency').textContent = `${route.latency.toFixed(2)} s`;
+      document.getElementById('routeHops').textContent = `${route.hops}`;
+    }
+
+    function displayAlternativeRoutes(routes) {
+      const div = document.getElementById('alternativeRoutes');
+      div.innerHTML = '';
+      routes.forEach((r, idx) => {
+        const el = document.createElement('div');
+        el.className = 'route-step';
+        el.innerHTML = `<strong>Route ${idx+1}</strong> — Hops: ${r.hops}, Latency: ${r.latency.toFixed(2)} s`;
+        div.appendChild(el);
+      });
+    }
+
+    // =============== METRICS & REPLAN ===============
+    function updateMetrics() {
+      const nowSec = simSeconds();
+      const active = contactGraph.filter(c => nowSec >= c.t_start && nowSec < c.t_end).length;
+      document.getElementById('activeContacts').textContent = active;
+    }
+
+    function replanRoute() {
+      if (!sourceNode || !destNode || sourceNode.id === destNode.id) return;
+
+      const t0 = simSeconds();
+      const tStart = performance.now();
+
+      let mode = document.getElementById('routingAlgorithm').value;
+      if (mode === 'auto') {
+        // Heurística simple: si hay muchas aristas activas, enhanced; si no, classic
+        const actives = contactGraph.filter(c => t0 >= c.t_start && t0 < c.t_end).length;
+        mode = (actives > Math.max(10, satellites.length / 2)) ? 'cgr-enhanced' : 'cgr-classic';
+      }
+      config.routingAlgorithm = mode;
+      document.getElementById('activeAlgo').textContent = (mode === 'cgr-enhanced') ? 'CGR Enhanced' : (mode === 'cgr-classic') ? 'CGR Classic' : 'Auto';
+
+      const bundleBytes = config.bundleSize;
+      const result = (mode === 'cgr-enhanced') ? cgrEnhancedSearch(sourceNode.id, destNode.id, t0, bundleBytes)
+                                               : cgrClassicSearch(sourceNode.id, destNode.id, t0, bundleBytes);
+
+      // Si no encontró, fuerza enhanced con fallback total
+      const finalResult = result.found ? result : cgrEnhancedSearch(sourceNode.id, destNode.id, t0, bundleBytes);
+
+      const tEnd = performance.now();
+      document.getElementById('calcTime').textContent = `${(tEnd - tStart).toFixed(1)} ms`;
+      document.getElementById('lastRecalc').textContent = `${t0.toFixed(1)} s`;
+
+      currentRoute = finalResult.found ? finalResult : null;
+      visualizeRoute(currentRoute);
+
+      // Alternativas
+      const k = config.kRoutes;
+      const routes = kYenRoutes(sourceNode.id, destNode.id, t0, bundleBytes, k);
+      if (routes.length === 0 && currentRoute) routes.push(currentRoute);
+      displayAlternativeRoutes(routes);
+    }
+
+    // =============== BUTTONS ===============
+    function changeSenderReceiver() {
+      if (satellites.length < 2) return;
+      // Aleatorio distinto
+      const a = satellites[Math.floor(Math.random() * satellites.length)];
+      let b = satellites[Math.floor(Math.random() * satellites.length)];
+      if (a.id === b.id) b = satellites[(satellites.indexOf(a) + 1) % satellites.length];
+      sourceNode = a; destNode = b;
+      recolorSourceDest();
+      replanRoute();
+    }
+
+    function toggleAnimation() {
+      viewer.clock.shouldAnimate = !viewer.clock.shouldAnimate;
+    }
+
+    function resetView() {
+      viewer.camera.flyHome(1.2);
+    }
+
+    // =============== LISTENERS (SLIDERS/INPUTS) ===============
+    document.getElementById('satCount').addEventListener('input', (e) => {
+      const v = parseInt(e.target.value, 10);
+      e.target.style.setProperty('--value', `${(v - 9) / (36 - 9) * 100}%`);
+      config.satCount = v;
+      document.getElementById('satCountDisplay').textContent = v;
+    });
+    document.getElementById('satCount').addEventListener('change', () => {
+      initConstellation(config.satCount, config.altitude);
+      buildContactGraph();
+      replanRoute();
+    });
+
+    document.getElementById('altitude').addEventListener('input', (e) => {
+      const v = parseInt(e.target.value, 10);
+      e.target.style.setProperty('--value', `${(v - 400) / (1200 - 400) * 100}%`);
+      config.altitude = v * 1000;
+      document.getElementById('altDisplay').textContent = v;
+    });
+    document.getElementById('altitude').addEventListener('change', () => {
+      initConstellation(config.satCount, config.altitude);
+      buildContactGraph();
+      replanRoute();
+    });
+
+    document.getElementById('simSpeed').addEventListener('input', (e) => {
+      const v = parseInt(e.target.value, 10);
+      e.target.style.setProperty('--value', `${(v - 1) / (100 - 1) * 100}%`);
+      config.simSpeed = v;
+      document.getElementById('speedDisplay').textContent = `${v}x`;
+      viewer.clock.multiplier = v;
+    });
+
+    document.getElementById('recalcFreq').addEventListener('input', (e) => {
+      const v = parseInt(e.target.value, 10);
+      e.target.style.setProperty('--value', `${(v - 1) / 9 * 100}%`);
+      config.recalcFreq = v;
+      document.getElementById('recalcDisplay').textContent = v;
+    });
+
+    document.getElementById('planningHorizon').addEventListener('change', (e) => {
+      const v = parseInt(e.target.value, 10);
+      config.planningHorizon = Math.max(5, Math.min(180, v)) * 60;
+      buildContactGraph();
+      replanRoute();
+    });
+
+    document.getElementById('bundleSize').addEventListener('change', (e) => {
+      config.bundleSize = Math.max(1, parseInt(e.target.value, 10)) * 1e6;
+      replanRoute();
+    });
+
+    document.getElementById('kRoutes').addEventListener('input', (e) => {
+      const v = parseInt(e.target.value, 10);
+      e.target.style.setProperty('--value', `${(v - 1) / 9 * 100}%`);
+      config.kRoutes = v;
+      document.getElementById('kDisplay').textContent = v;
+      replanRoute();
+    });
+
+    document.getElementById('routingAlgorithm').addEventListener('change', (e) => {
+      config.routingAlgorithm = e.target.value;
+      replanRoute();
+    });
+
+    document.getElementById('safeDistance').addEventListener('change', (e) => {
+      const km = Math.max(1, Math.min(50, parseInt(e.target.value, 10)));
+      config.safeDistance = km * 1000;
+    });
+
+    // =============== CLOCK TICK LOOP ===============
+    let lastRecalcSec = 0;
+    let lastMetricsSec = 0;
+
+    viewer.clock.onTick.addEventListener(() => {
+      const t = simSeconds();
+      // Sim time display
+      const el = document.getElementById('simTimeDisplay');
+      if (el) el.textContent = t.toFixed(1);
+
+      // métricas ~2/seg
+      if (t - lastMetricsSec > 0.5) {
+        updateMetrics();
+        updateContactWindowsList();
+        lastMetricsSec = t;
+      }
+
+      // colisiones ~1/seg
+      detectCollisions();
+
+      // replan periódico
+      if (t - lastRecalcSec >= config.recalcFreq) {
+        buildContactGraph();
+        replanRoute();
+        lastRecalcSec = t;
+      }
+    });
+
+    // =============== INIT ===============
+    function boot() {
+      updateDisplayBadges();
+      initConstellation(config.satCount, config.altitude);
+      buildContactGraph();
+      replanRoute();
+      viewer.camera.flyHome(0);
+    }
+    boot();
+
+    // Expose for buttons
+    window.changeSenderReceiver = changeSenderReceiver;
+    window.toggleAnimation = toggleAnimation;
+    window.resetView = resetView;
+    window.switchTab = switchTab;
+    window.toggleBottomPanel = toggleBottomPanel;
+
+  </script>
 </body>
 </html>
