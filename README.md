@@ -136,3 +136,143 @@ make
 
 Desarrollado para EcoStation Europa — módulo de planificación y exploración de rutas CGR sobre datos públicos.
 
+---
+
+# CGR - Contact Graph Routing for Space Networks
+
+**Real-time satellite network routing simulator with DTN (Delay-Tolerant Networking) capabilities.**
+
+## 🚀 Quick Start
+
+```bash
+# Build and run real-time simulation
+make run
+
+# That's it! The simulator will:
+# - Generate a realistic 12-satellite network
+# - Compute optimal routes every 15 seconds
+# - Show alternative paths with K=5 diversity
+# - Display progress in real-time (Ctrl+C to stop)
+```
+
+## 📁 Project Structure
+
+```
+├── src/
+│   ├── cgr.c           # Core CGR algorithm (Dijkstra + Yen's K-shortest)
+│   ├── cgr_live.c      # Real-time simulation (main executable)
+│   ├── csv.c           # CSV parser for contact plans
+│   ├── heap.c          # Min-heap for Dijkstra
+│   ├── leo_metrics.c   # LEO satellite link metrics
+│   └── nasa_api.c      # NASA SODA API integration
+├── include/            # Header files
+├── data/               # Example contact plans (OPTIONAL - for testing only)
+└── Makefile
+```
+
+## 🛰️ Is the `data/` folder necessary?
+
+**No**, the `data/` folder is **optional**. It contains example CSV files for testing:
+
+- **With API mode** (`--source api`): Fetches real-time data from NASA
+- **With synthetic mode** (`--source synth`): Generates realistic contact plans on-the-fly
+- **With local mode** (`--source local`): Uses CSV files from `data/`
+
+**Recommendation**: Keep `data/contacts_realistic.csv` as a fallback for offline testing.
+
+## 🌐 NASA API Integration
+
+### Current Configuration
+
+The code uses **NASA's SODA API** structure expecting:
+```csv
+id,from,to,t_start,t_end,owlt,rate_bps,setup_s,residual_bytes
+```
+
+### How to Use with Real NASA Data
+
+1. **Find a compatible dataset** at https://data.nasa.gov/dataset/
+   - Look for datasets with satellite contact/telemetry data
+   - Recommended: ISS tracking, satellite conjunction data
+
+2. **Adapt the data schema** (if needed):
+   - Modify `nasa_api.c` to transform NASA data to the expected format
+   - Or use the **synthetic generator** (recommended for demos)
+
+3. **Run with API**:
+```bash
+./cgr_live <dataset-id> --source api --app-token YOUR_TOKEN
+```
+
+### Why Synthetic Mode is Better for Demos
+
+The synthetic generator (`--source synth`) creates realistic satellite networks with:
+- ✅ Realistic orbital periods (~90 min)
+- ✅ Inter-Satellite Links (ISLs)
+- ✅ Ground station contact windows
+- ✅ Variable data rates and capacities
+- ✅ Randomized topology (configurable seed)
+
+## 🎮 Usage Examples
+
+### Default Real-Time Demo
+```bash
+make run
+# Uses: 12 satellites, 15s time step, 50MB bundles, K=5 routes
+```
+
+### Custom Parameters
+```bash
+./cgr_live --source synth --synth-n 20 --tick 10 --k 3 --bytes 100e6
+# 20 satellites, 10s steps, 3 alternative routes, 100MB bundles
+```
+
+### With NASA API (when available)
+```bash
+./cgr_live abcd-1234 --source api --app-token YOUR_TOKEN --tick 20 --k 5
+```
+
+### Local CSV Testing
+```bash
+./cgr_live --source local --contacts data/contacts_realistic.csv
+```
+
+## 📊 Output Explanation
+
+```
+╔════════════════════════════════════════════════════════╗
+║  CYCLE #1    | Simulation time: 0.0 s                  
+╠════════════════════════════════════════════════════════╣
+║  Active contacts:   8                                  
+║  Data source:       SYNTHETIC                          
+║  Errors:            0                                  
+╚════════════════════════════════════════════════════════╝
+
+🛰️  OPTIMAL ROUTE FOUND:
+   • ETA:      92.456 s       ← Earliest arrival time
+   • Latency:  92.456 s       ← Total delivery time
+   • Hops:     5              ← Number of satellite links
+   • Path:     0 → 3 → 7 → 11 → 14
+
+📊 Alternative routes (K=5):
+   #1: ETA=92.456 s, 5 hops (+0.0% overhead)    ← Best route
+   #2: ETA=95.123 s, 6 hops (+2.9% overhead)    ← Backup
+   #3: ETA=98.772 s, 5 hops (+6.8% overhead)    ← Alternative
+   ...
+```
+
+## 🔧 Build Options
+
+```bash
+make          # Standard build
+make debug    # Debug build with sanitizers
+make clean    # Remove objects
+make fclean   # Remove everything
+make re       # Rebuild from scratch
+```
+
+## 🧪 Advanced Features
+
+### K-Shortest Paths
+- **Yen-lite algorithm**: Finds diverse alternative routes without consuming
+

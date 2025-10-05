@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>CGR Enhanced v2.0 - Planificación Avanzada LEO</title>
+    <title>CGR Enhanced v3.1 - Dynamic LEO Routing</title>
     <script src="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Cesium.js"></script>
     <link href="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
     <style>
@@ -37,16 +37,13 @@
         #bottomPanel {
             bottom: 20px; left: 50%;
             transform: translateX(-50%);
-            width: 900px;
+            width: 700px;
+            max-height: 350px;
             transition: all 0.3s ease;
         }
         
         #bottomPanel.collapsed {
             max-height: 60px;
-        }
-        
-        #bottomPanel:not(.collapsed) {
-            max-height: 280px;
         }
         
         .toggle-header {
@@ -265,27 +262,11 @@
             font-size: 20px;
         }
         
-        .algo-badge {
-            display: inline-block;
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-size: 11px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin: 3px;
-        }
-        
-        .algo-dijkstra { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid #ef4444; }
-        .algo-cgr-classic { background: rgba(251, 191, 36, 0.2); color: #fcd34d; border: 1px solid #f59e0b; }
-        .algo-cgr-enhanced { background: rgba(34, 197, 94, 0.2); color: #86efac; border: 1px solid #22c55e; }
-        .algo-cgr-ml { background: rgba(139, 92, 246, 0.2); color: #c4b5fd; border: 1px solid #8b5cf6; }
-        
         .contact-window {
             background: rgba(30, 41, 59, 0.6);
-            padding: 14px;
+            padding: 12px;
             border-radius: 8px;
-            margin: 10px 0;
+            margin: 8px 0;
             border-left: 3px solid #10b981;
             font-size: 12px;
             transition: all 0.3s;
@@ -333,36 +314,6 @@
             font-size: 13px;
         }
         
-        .route-hop {
-            display: inline-block;
-            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-            color: white;
-            padding: 5px 12px;
-            border-radius: 6px;
-            margin: 3px;
-            font-weight: 700;
-            font-size: 12px;
-            font-family: 'SF Mono', 'Menlo', monospace;
-            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
-        }
-        
-        .improvement-badge {
-            display: inline-block;
-            padding: 8px 14px;
-            border-radius: 8px;
-            font-weight: 700;
-            font-size: 14px;
-            background: linear-gradient(135deg, #22c55e 0%, #10b981 100%);
-            color: white;
-            box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
-            margin: 5px 0;
-        }
-        
-        .improvement-negative {
-            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
-        }
-        
         .status-indicator {
             width: 12px;
             height: 12px;
@@ -374,8 +325,6 @@
         }
         
         .status-indicator.active { background: #22c55e; color: #22c55e; }
-        .status-indicator.computing { background: #f59e0b; color: #f59e0b; }
-        .status-indicator.error { background: #ef4444; color: #ef4444; }
         
         @keyframes pulse {
             0%, 100% { opacity: 1; transform: scale(1); }
@@ -390,47 +339,6 @@
             margin: 12px 0;
             font-size: 12px;
             line-height: 1.7;
-        }
-        
-        .feature-tag {
-            display: inline-block;
-            background: rgba(168, 85, 247, 0.2);
-            color: #c4b5fd;
-            padding: 4px 10px;
-            border-radius: 5px;
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            margin: 2px;
-            border: 1px solid #a855f7;
-        }
-        
-        .comparison-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
-            margin: 15px 0;
-        }
-        
-        .comparison-item {
-            background: rgba(30, 41, 59, 0.5);
-            padding: 12px;
-            border-radius: 8px;
-            border: 1px solid rgba(100, 116, 139, 0.2);
-        }
-        
-        .comparison-label {
-            font-size: 11px;
-            color: #94a3b8;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 6px;
-        }
-        
-        .comparison-value {
-            font-size: 18px;
-            font-weight: 700;
-            font-family: 'SF Mono', 'Menlo', monospace;
         }
         
         .legend-box {
@@ -459,6 +367,71 @@
         .legend-color.source { background: #22c55e; }
         .legend-color.destination { background: #ef4444; }
         .legend-color.normal { background: #06b6d4; }
+        
+        .collision-warning {
+            background: rgba(239, 68, 68, 0.2);
+            border: 2px solid #ef4444;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 8px 0;
+            font-size: 12px;
+            animation: warning-pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes warning-pulse {
+            0%, 100% { background: rgba(239, 68, 68, 0.2); }
+            50% { background: rgba(239, 68, 68, 0.4); }
+        }
+        
+        .collision-safe {
+            background: rgba(34, 197, 94, 0.2);
+            border: 2px solid #22c55e;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 8px 0;
+            font-size: 12px;
+        }
+        
+        .tab-container {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 10px;
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid rgba(100, 116, 139, 0.2);
+            border-radius: 8px;
+            cursor: pointer;
+            text-align: center;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .tab:hover {
+            background: rgba(30, 41, 59, 0.8);
+        }
+        
+        .tab.active {
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            border-color: #6366f1;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .collapsible-content {
+            overflow-y: auto;
+            transition: max-height 0.3s ease;
+        }
         
         ::-webkit-scrollbar {
             width: 10px;
@@ -494,83 +467,61 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.6; }
         }
-        
-        .collapsible-content {
-            overflow-y: auto;
-            transition: max-height 0.3s ease;
-        }
     </style>
 </head>
 <body>
     <div id="cesiumContainer"></div>
     
-    <!-- Panel Izquierdo: Configuración -->
+    <!-- Panel Izquierdo -->
     <div id="leftPanel" class="panel">
         <div class="header">
-            <h2>⚙️ Configuración Avanzada</h2>
-            <div class="subtitle">CGR Enhanced v2.0 <span class="badge-new">NASA IMPROVED</span></div>
+            <h2>Configuración Avanzada</h2>
+            <div class="subtitle">CGR Enhanced v3.1 <span class="badge-new">OPTIMIZADO</span></div>
         </div>
         
         <div class="section">
-            <label>Número de Satélites: <span class="value-badge" id="satCountDisplay">9</span></label>
-            <input type="range" id="satCount" min="9" max="36" value="9" step="9" style="--value: 0%">
+            <label>Número de Satélites: <span class="value-badge" id="satCountDisplay">27</span></label>
+            <input type="range" id="satCount" min="9" max="36" value="27" step="9" style="--value: 67%">
         </div>
         
         <div class="section">
-            <label>Altitud Orbital (km): <span class="value-badge" id="altDisplay">550</span></label>
-            <input type="range" id="altitude" min="400" max="1200" value="550" step="50" style="--value: 19%">
+            <label>Altitud Orbital (km): <span class="value-badge" id="altDisplay">780</span></label>
+            <input type="range" id="altitude" min="400" max="1200" value="780" step="50" style="--value: 47.5%">
         </div>
         
         <div class="section">
-            <label>Velocidad Simulación: <span class="value-badge" id="speedDisplay">60x</span></label>
-            <input type="range" id="simSpeed" min="10" max="200" value="60" step="10" style="--value: 26%">
+            <label>Velocidad Simulación: <span class="value-badge" id="speedDisplay">30x</span></label>
+            <input type="range" id="simSpeed" min="10" max="200" value="30" step="10" style="--value: 10%">
         </div>
         
-        <h3>Algoritmo CGR <span class="badge-new">MEJORADO</span></h3>
+        <h3>Algoritmo CGR <span class="badge-new">AUTO-ADAPTATIVO</span></h3>
         
         <div class="section">
             <label>Modo de Ruteo:</label>
             <select id="routingAlgorithm">
-                <option value="dijkstra">Dijkstra Clásico (Baseline)</option>
-                <option value="cgr-classic">CGR Clásico (Temporal)</option>
-                <option value="cgr-enhanced" selected>CGR Enhanced (Consume + EWMA)</option>
-                <option value="cgr-ml">CGR ML-Predictivo (Experimental)</option>
+                <option value="cgr-classic">CGR Clásico</option>
+                <option value="cgr-enhanced">CGR Enhanced</option>
+                <option value="auto" selected>Auto (Mejor Performance)</option>
             </select>
         </div>
         
         <div class="algo-info">
-            <strong>🔬 CGR Enhanced:</strong> Implementa las mejoras del repositorio NASA:
-            <div style="margin-top:8px;">
-                <span class="feature-tag">Consumo de capacidad</span>
-                <span class="feature-tag">EWMA Penalty</span>
-                <span class="feature-tag">Pre-check viable</span>
-                <span class="feature-tag">K-Yen deduplicado</span>
-            </div>
+            <strong>Modo Auto:</strong> Selecciona automáticamente el algoritmo más rápido. Actualiza la ruta cada 2 segundos para máxima visualización.
+        </div>
+        
+        <div class="section">
+            <label>Frecuencia Recálculo (s): <span class="value-badge" id="recalcDisplay">2</span></label>
+            <input type="range" id="recalcFreq" min="1" max="10" value="2" step="1" style="--value: 11%">
         </div>
         
         <div class="section">
             <label>Horizonte de Planificación (min):</label>
-            <input type="number" id="planningHorizon" value="30" min="5" max="120" step="5">
+            <input type="number" id="planningHorizon" value="90" min="5" max="120" step="5">
         </div>
         
         <div class="section">
             <label>Tamaño Bundle (MB):</label>
-            <input type="number" id="bundleSize" value="50" min="1" max="500" step="10">
-        </div>
-        
-        <div class="section">
-            <label>
-                <input type="checkbox" id="enableConsume" checked>
-                Consumir Capacidad Residual
-            </label>
-            <label>
-                <input type="checkbox" id="enableEWMA" checked>
-                Aprendizaje EWMA (α=0.2, λ=1.0)
-            </label>
-            <label>
-                <input type="checkbox" id="enablePrecheck" checked>
-                Pre-check de Viabilidad (Optimización)
-            </label>
+            <input type="number" id="bundleSize" value="5" min="1" max="500" step="1">
         </div>
         
         <h3>Rutas Alternativas</h3>
@@ -580,115 +531,107 @@
             <input type="range" id="kRoutes" min="1" max="10" value="3" step="1" style="--value: 22%">
         </div>
         
-        <!-- Leyenda de Colores -->
-        <h3>Leyenda de Satélites</h3>
         <div class="legend-box">
             <div class="legend-item">
                 <div class="legend-color source"></div>
-                <span><strong>Verde:</strong> Satélite Origen (fuente de datos)</span>
+                <span><strong>Verde:</strong> Emisor</span>
             </div>
             <div class="legend-item">
                 <div class="legend-color destination"></div>
-                <span><strong>Rojo:</strong> Satélite Destino (receptor final)</span>
+                <span><strong>Rojo:</strong> Receptor</span>
             </div>
             <div class="legend-item">
                 <div class="legend-color normal"></div>
-                <span><strong>Cyan:</strong> Satélites intermedios en la red</span>
+                <span><strong>Cyan:</strong> Intermedios</span>
             </div>
         </div>
         
-        <button onclick="replanRoute()">🔄 Recalcular Ruta Óptima</button>
-        <button onclick="runComparison()" class="secondary">📊 Comparar Algoritmos</button>
-        <button onclick="toggleAnimation()" class="secondary">⏯️ Play/Pause</button>
-        <button onclick="resetView()" class="secondary">🎯 Resetear Vista</button>
+        <button onclick="manualRecalc()">Recalcular Ahora</button>
+        <button onclick="runComparison()" class="secondary">Comparar Algoritmos</button>
+        <button onclick="toggleAnimation()" class="secondary">Play/Pause</button>
+        <button onclick="resetView()" class="secondary">Resetear Vista</button>
     </div>
     
-    <!-- Panel Derecho: Métricas -->
+    <!-- Panel Derecho -->
     <div id="rightPanel" class="panel">
         <div class="header">
-            <h2>📊 Métricas en Tiempo Real</h2>
+            <h2>Métricas en Tiempo Real</h2>
             <div class="subtitle">Rendimiento del Sistema</div>
         </div>
         
         <div class="metric-card">
             <div class="status-indicator active"></div>
-            <strong>Estado:</strong> <span id="systemStatus">Operativo - CGR Enhanced Activo</span>
+            <strong>Algoritmo Activo:</strong> <span id="activeAlgo">Auto-selección</span>
         </div>
         
         <div class="metric-card">
             <div class="metric-row">
-                <span class="metric-label">Ventanas Activas:</span>
+                <span class="metric-label">Enlaces Activos:</span>
                 <span class="metric-value highlight" id="activeContacts">0</span>
             </div>
             <div class="metric-row">
-                <span class="metric-label">Contactos en Horizonte:</span>
-                <span class="metric-value" id="futureContacts">0</span>
+                <span class="metric-label">Última Recálculo:</span>
+                <span class="metric-value" id="lastRecalc">-</span>
             </div>
             <div class="metric-row">
-                <span class="metric-label">Capacidad Residual Total:</span>
-                <span class="metric-value" id="totalCapacity">0 GB</span>
+                <span class="metric-label">Tiempo Cálculo:</span>
+                <span class="metric-value" id="calcTime">-</span>
             </div>
         </div>
         
-        <h3>Ruta Actual (CGR Enhanced)</h3>
+        <h3>Detección de Colisiones</h3>
+        
+        <div class="section">
+            <label>Distancia Mínima Segura (km):</label>
+            <input type="number" id="safeDistance" value="5" min="1" max="50" step="1">
+        </div>
+        
+        <div id="collisionStatus"></div>
+        
+        <h3>Ruta Activa</h3>
         
         <div class="metric-card">
             <div class="metric-row">
-                <span class="metric-label">ETA:</span>
-                <span class="metric-value highlight" id="routeETA">-</span>
-            </div>
-            <div class="metric-row">
                 <span class="metric-label">Latencia E2E:</span>
-                <span class="metric-value" id="routeLatency">-</span>
+                <span class="metric-value highlight" id="routeLatency">-</span>
             </div>
             <div class="metric-row">
-                <span class="metric-label">Saltos (Hops):</span>
+                <span class="metric-label">Saltos:</span>
                 <span class="metric-value" id="routeHops">0</span>
             </div>
             <div class="metric-row">
-                <span class="metric-label">Throughput Mínimo:</span>
-                <span class="metric-value" id="routeThroughput">-</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Confiabilidad:</span>
-                <span class="metric-value" id="routeReliability">-</span>
+                <span class="metric-label">Eficiencia vs Clásico:</span>
+                <span class="metric-value" id="efficiency">-</span>
             </div>
         </div>
-        
-        <div id="routeVisualization"></div>
-        
-        <h3>Comparativa vs. Baseline</h3>
-        
-        <div class="comparison-grid">
-            <div class="comparison-item">
-                <div class="comparison-label">Dijkstra Clásico</div>
-                <div class="comparison-value" style="color: #fca5a5;" id="dijkstraMetric">-</div>
-            </div>
-            <div class="comparison-item">
-                <div class="comparison-label">CGR Enhanced</div>
-                <div class="comparison-value" style="color: #86efac;" id="cgrEnhancedMetric">-</div>
-            </div>
-        </div>
-        
-        <div id="improvementDisplay"></div>
         
         <h3>Rutas Alternativas K-Yen</h3>
         <div id="alternativeRoutes" style="max-height: 180px; overflow-y: auto;">
-            <!-- Se llenará dinámicamente -->
         </div>
     </div>
     
-    <!-- Panel Inferior: Ventanas de Contacto (Desplegable) -->
+    <!-- Panel Inferior -->
     <div id="bottomPanel" class="panel collapsed">
         <div class="header toggle-header" onclick="toggleBottomPanel()">
             <div>
-                <h2>📅 Ventanas de Contacto Planificadas</h2>
-                <div class="subtitle">Grafo Temporal de Contactos</div>
+                <h2>Información del Sistema</h2>
+                <div class="subtitle"></div>
             </div>
             <span class="toggle-icon collapsed">▼</span>
         </div>
         <div class="collapsible-content" id="contactWindowsContent" style="max-height: 0; overflow: hidden;">
-            <div id="contactWindows" style="max-height: 200px; overflow-y: auto;"></div>
+            <div class="tab-container">
+                <div class="tab active" onclick="switchTab('contacts')">Enlaces</div>
+                <div class="tab" onclick="switchTab('collisions')">Colisiones</div>
+            </div>
+            
+            <div id="contactsTab" class="tab-content active">
+                <div id="contactWindows" style="max-height: 240px; overflow-y: auto;"></div>
+            </div>
+            
+            <div id="collisionsTab" class="tab-content">
+                <div id="collisionsList" style="max-height: 240px; overflow-y: auto;"></div>
+            </div>
         </div>
     </div>
 
@@ -709,12 +652,13 @@
             fullscreenButton: false
         });
 
-        // Mejorar la apariencia de la Tierra
         viewer.scene.globe.enableLighting = true;
         viewer.scene.globe.atmosphereLightIntensity = 3.0;
         viewer.scene.globe.showGroundAtmosphere = true;
 
         const EARTH_RADIUS = 6371000;
+        const GM = 3.986004418e14;
+        
         let satellites = [];
         let contactGraph = [];
         let currentRoute = null;
@@ -724,23 +668,23 @@
         let linkEntities = [];
         let routeEntities = [];
         let edgeStates = [];
+        let collisionWarnings = [];
+        let activeTab = 'contacts';
+        let lastRecalcTime = 0;
+        let performanceStats = { classic: 0, enhanced: 0 };
         
         let config = {
-            satCount: 9,  // Cambiado a 9 por defecto
-            altitude: 550000,
-            simSpeed: 60,
-            planningHorizon: 30 * 60,
-            bundleSize: 50 * 1e6,
-            routingAlgorithm: 'cgr-enhanced',
-            enableConsume: true,
-            enableEWMA: true,
-            enablePrecheck: true,
+            satCount: 27,
+            altitude: 780000,
+            simSpeed: 30,
+            planningHorizon: 90 * 60,
+            bundleSize: 5 * 1e6,
+            routingAlgorithm: 'auto',
             kRoutes: 3,
-            alpha: 0.2,
-            lambda: 1.0
+            safeDistance: 5000,
+            recalcFreq: 2
         };
 
-        // Función para desplegar/colapsar el panel inferior
         function toggleBottomPanel() {
             const panel = document.getElementById('bottomPanel');
             const content = document.getElementById('contactWindowsContent');
@@ -748,7 +692,7 @@
             
             if (panel.classList.contains('collapsed')) {
                 panel.classList.remove('collapsed');
-                content.style.maxHeight = '200px';
+                content.style.maxHeight = '280px';
                 icon.classList.remove('collapsed');
             } else {
                 panel.classList.add('collapsed');
@@ -757,74 +701,328 @@
             }
         }
 
-        // ============ MEJORA 1: Pre-check de Viabilidad ============
-        function contactIsViable(contact, t_arrival, bundle_bytes) {
-            if (t_arrival > contact.t_end) return false;
+        function switchTab(tabName) {
+            activeTab = tabName;
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
             
-            const start_tx = Math.max(t_arrival, contact.t_start);
-            const window = contact.t_end - start_tx - contact.setup_s;
-            if (window <= 0) return false;
-            
-            const rate = Math.max(contact.rate_bps, 1.0);
-            const cap_window = window * rate / 8;
-            const cap_actual = Math.min(contact.residual_bytes, cap_window);
-            
-            if (cap_actual < bundle_bytes) return false;
-            
-            const tx_time = bundle_bytes / (rate / 8);
-            const finish = start_tx + contact.setup_s + tx_time;
-            if (finish > contact.t_end) return false;
-            
-            return true;
+            if (tabName === 'contacts') {
+                document.querySelector('.tab:nth-child(1)').classList.add('active');
+                document.getElementById('contactsTab').classList.add('active');
+            } else {
+                document.querySelector('.tab:nth-child(2)').classList.add('active');
+                document.getElementById('collisionsTab').classList.add('active');
+            }
         }
 
-        // ============ MEJORA 2: Cálculo de ETA con Espera Temporal ============
-        function calculateETA(contact, t_in, bundle_bytes) {
-            if (!contactIsViable(contact, t_in, bundle_bytes)) return Infinity;
+        // ============ BÚSQUEDA OPTIMIZADA DE CONTACTOS ISL ============
+        function findOptimalContactWindows(sat1, sat2, startTime, endTime) {
+            const windows = [];
+            const timeStep = 30;
+            const maxDistance = 5500000; // 5500 km para LEO ISL
             
-            const start_tx = Math.max(t_in, contact.t_start);
-            const wait_time = Math.max(0, contact.t_start - t_in);
-            
-            const rate = Math.max(contact.rate_bps, 1.0) / 8;
-            const tx_time = bundle_bytes / rate;
-            
-            const finish = start_tx + contact.setup_s + tx_time;
-            const eta = finish + contact.owlt;
-            
-            return eta;
+            let inContact = false;
+            let windowStart = null;
+            let windowDistance = 0;
+            let bestDistance = Infinity;
+
+            for (let t = startTime; t <= endTime; t += timeStep) {
+                const tempTime = t;
+                simulationTime = tempTime;
+                
+                const pos1 = getSatellitePosition(sat1.plane, sat1.index, sat1.meanAnomalyStart, sat1.inclination, sat1.raan);
+                const pos2 = getSatellitePosition(sat2.plane, sat2.index, sat2.meanAnomalyStart, sat2.inclination, sat2.raan);
+                
+                const distance = Cesium.Cartesian3.distance(pos1, pos2);
+                
+                // Para ISL solo importa la distancia directa
+                if (distance <= maxDistance && !inContact) {
+                    inContact = true;
+                    windowStart = t;
+                    windowDistance = distance;
+                    bestDistance = distance;
+                } else if (inContact) {
+                    if (distance < bestDistance) {
+                        bestDistance = distance;
+                        windowDistance = distance;
+                    }
+                    
+                    if (distance > maxDistance || t === endTime) {
+                        inContact = false;
+                        if (windowStart !== null && (t - windowStart) > 30) {
+                            windows.push({
+                                start: windowStart,
+                                end: t,
+                                distance: windowDistance,
+                                quality: calculateLinkQuality(windowDistance, sat1, sat2)
+                            });
+                        }
+                    }
+                }
+            }
+
+            simulationTime = startTime;
+            return windows;
         }
 
-        // ============ MEJORA 3: Penalización EWMA ============
-        function applyEWMA(contact_id, wait_time) {
-            if (!config.enableEWMA) return;
+        function calculateLinkQuality(distance, sat1, sat2) {
+            const maxDist = 5500000;
+            const distanceFactor = 1 - (distance / maxDist);
+            const planeDiversity = Math.abs(sat1.plane - sat2.plane) / 2;
+            return (distanceFactor * 0.7 + planeDiversity * 0.3);
+        }
+
+        // ============ DETECCIÓN DE COLISIONES ============
+        function detectCollisions() {
+            collisionWarnings = [];
+            const safeDistance = config.safeDistance;
             
-            const idx = contactGraph.findIndex(c => c.id === contact_id);
-            if (idx === -1) return;
-            
-            if (!edgeStates[idx]) {
-                edgeStates[idx] = { penalty_s: 0, usage_count: 0 };
+            for (let i = 0; i < satellites.length; i++) {
+                for (let j = i + 1; j < satellites.length; j++) {
+                    const sat1 = satellites[i];
+                    const sat2 = satellites[j];
+                    
+                    const pos1 = sat1.entity.position.getValue(viewer.clock.currentTime || Cesium.JulianDate.now());
+                    const pos2 = sat2.entity.position.getValue(viewer.clock.currentTime || Cesium.JulianDate.now());
+                    
+                    if (!pos1 || !pos2) continue;
+                    
+                    const distance = Cesium.Cartesian3.distance(pos1, pos2) / 1000;
+                    
+                    if (distance < safeDistance) {
+                        const vel1 = calculateOrbitalVelocityVector(sat1);
+                        const vel2 = calculateOrbitalVelocityVector(sat2);
+                        
+                        const relVel = Cesium.Cartesian3.subtract(vel1, vel2, new Cesium.Cartesian3());
+                        const relativeVelocity = Cesium.Cartesian3.magnitude(relVel) / 1000;
+                        
+                        const timeToClosestApproach = predictClosestApproach(sat1, sat2);
+                        const riskLevel = calculateCollisionRisk(distance, relativeVelocity, safeDistance);
+                        
+                        collisionWarnings.push({
+                            sat1: `SAT-${sat1.id}`,
+                            sat2: `SAT-${sat2.id}`,
+                            distance: distance.toFixed(2),
+                            relativeVelocity: relativeVelocity.toFixed(2),
+                            timeToCA: timeToClosestApproach,
+                            riskLevel: riskLevel,
+                            probability: calculateCollisionProbability(distance, safeDistance)
+                        });
+                    }
+                }
             }
             
-            edgeStates[idx].penalty_s = (1 - config.alpha) * edgeStates[idx].penalty_s + 
-                                        config.alpha * wait_time;
-            edgeStates[idx].usage_count++;
+            updateCollisionDisplay();
         }
 
-        // ============ MEJORA 4: Consumo de Capacidad ============
-        function consumeCapacity(route, bundle_bytes) {
-            if (!config.enableConsume || !route || !route.found) return;
+        function calculateOrbitalVelocityVector(sat) {
+            const r = EARTH_RADIUS + config.altitude;
+            const v = Math.sqrt(GM / r);
             
-            route.contact_ids.forEach(contact_id => {
-                const contact = contactGraph.find(c => c.id === contact_id);
-                if (contact) {
-                    const before = contact.residual_bytes;
-                    contact.residual_bytes = Math.max(0, contact.residual_bytes - bundle_bytes);
-                    console.log(`Consume: Contact ${contact_id} | ${(before/1e6).toFixed(1)} → ${(contact.residual_bytes/1e6).toFixed(1)} MB`);
-                }
-            });
+            const pos = getSatellitePosition(sat.plane, sat.index, sat.meanAnomalyStart, sat.inclination, sat.raan);
+            
+            const dt = 0.1;
+            simulationTime += dt;
+            const posNext = getSatellitePosition(sat.plane, sat.index, sat.meanAnomalyStart, sat.inclination, sat.raan);
+            simulationTime -= dt;
+            
+            const velocity = Cesium.Cartesian3.subtract(posNext, pos, new Cesium.Cartesian3());
+            Cesium.Cartesian3.divideByScalar(velocity, dt, velocity);
+            
+            return velocity;
         }
 
-        // ============ ALGORITMO CGR ENHANCED ============
+        function predictClosestApproach(sat1, sat2) {
+            let minDistance = Infinity;
+            let timeToCA = 0;
+            const lookAhead = 3600;
+            const step = 60;
+            
+            for (let dt = 0; dt < lookAhead; dt += step) {
+                const futureTime = simulationTime + dt;
+                const oldTime = simulationTime;
+                simulationTime = futureTime;
+                
+                const pos1 = getSatellitePosition(sat1.plane, sat1.index, sat1.meanAnomalyStart, sat1.inclination, sat1.raan);
+                const pos2 = getSatellitePosition(sat2.plane, sat2.index, sat2.meanAnomalyStart, sat2.inclination, sat2.raan);
+                
+                const distance = Cesium.Cartesian3.distance(pos1, pos2);
+                
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    timeToCA = dt;
+                }
+                
+                simulationTime = oldTime;
+            }
+            
+            return timeToCA;
+        }
+
+        function calculateCollisionRisk(distance, relativeVel, safeDistance) {
+            const distanceRisk = 1 - (distance / safeDistance);
+            const velocityRisk = Math.min(relativeVel / 15, 1);
+            const risk = (distanceRisk * 0.6 + velocityRisk * 0.4);
+            
+            if (risk > 0.7) return 'CRITICAL';
+            if (risk > 0.4) return 'HIGH';
+            if (risk > 0.2) return 'MEDIUM';
+            return 'LOW';
+        }
+
+        function calculateCollisionProbability(distance, safeDistance) {
+            const ratio = distance / safeDistance;
+            if (ratio > 1) return 0;
+            return (1 - ratio) * 100;
+        }
+
+        function updateCollisionDisplay() {
+            const statusDiv = document.getElementById('collisionStatus');
+            const listDiv = document.getElementById('collisionsList');
+            
+            if (collisionWarnings.length === 0) {
+                statusDiv.innerHTML = `
+                    <div class="collision-safe">
+                        <strong>Estado: SEGURO</strong><br>
+                        No se detectaron riesgos de colisión inmediatos
+                    </div>
+                `;
+                listDiv.innerHTML = '<p style="text-align:center; color:#94a3b8;">No hay alertas de colisión</p>';
+            } else {
+                const criticalCount = collisionWarnings.filter(w => w.riskLevel === 'CRITICAL').length;
+                const highCount = collisionWarnings.filter(w => w.riskLevel === 'HIGH').length;
+                
+                statusDiv.innerHTML = `
+                    <div class="collision-warning">
+                        <strong>ADVERTENCIA DE COLISIÓN</strong><br>
+                        ${collisionWarnings.length} riesgo(s) detectado(s)<br>
+                        <small>Críticos: ${criticalCount} | Altos: ${highCount}</small>
+                    </div>
+                `;
+                
+                listDiv.innerHTML = '';
+                collisionWarnings.forEach(warning => {
+                    const div = document.createElement('div');
+                    div.className = 'contact-window';
+                    div.style.borderLeftColor = warning.riskLevel === 'CRITICAL' ? '#ef4444' : 
+                                                 warning.riskLevel === 'HIGH' ? '#f59e0b' : '#fbbf24';
+                    div.innerHTML = `
+                        <div class="contact-info">
+                            <span class="contact-label"><strong>${warning.sat1} - ${warning.sat2}</strong></span>
+                            <span class="contact-value" style="color: ${warning.riskLevel === 'CRITICAL' ? '#ef4444' : '#f59e0b'}">${warning.riskLevel}</span>
+                        </div>
+                        <div class="contact-info">
+                            <span class="contact-label">Distancia:</span>
+                            <span class="contact-value">${warning.distance} km</span>
+                        </div>
+                        <div class="contact-info">
+                            <span class="contact-label">Vel. Relativa:</span>
+                            <span class="contact-value">${warning.relativeVelocity} km/s</span>
+                        </div>
+                        <div class="contact-info">
+                            <span class="contact-label">Tiempo a CA:</span>
+                            <span class="contact-value">${Math.floor(warning.timeToCA / 60)} min</span>
+                        </div>
+                        <div class="contact-info">
+                            <span class="contact-label">Prob. Colisión:</span>
+                            <span class="contact-value">${warning.probability.toFixed(1)}%</span>
+                        </div>
+                    `;
+                    listDiv.appendChild(div);
+                });
+            }
+        }
+
+        // ============ CGR CLÁSICO ============
+        function cgrClassicSearch(src, dst, t0, bundle_bytes) {
+            const distances = {};
+            const arrivalTimes = {};
+            const previous = {};
+            const unvisited = new Set();
+            
+            contactGraph.forEach((c, idx) => {
+                distances[idx] = Infinity;
+                arrivalTimes[idx] = t0;
+                previous[idx] = null;
+                unvisited.add(idx);
+            });
+            
+            contactGraph.forEach((c, idx) => {
+                if (c.from !== src) return;
+                const eta = t0 + c.owlt + c.setup_s;
+                if (eta > c.t_end) return;
+                distances[idx] = eta - t0;
+                arrivalTimes[idx] = eta;
+            });
+            
+            let best_end = null;
+            let best_eta = Infinity;
+            
+            while (unvisited.size > 0) {
+                let current_idx = null;
+                let min_dist = Infinity;
+                
+                unvisited.forEach(idx => {
+                    if (distances[idx] < min_dist) {
+                        min_dist = distances[idx];
+                        current_idx = idx;
+                    }
+                });
+                
+                if (current_idx === null || min_dist === Infinity) break;
+                unvisited.delete(current_idx);
+                
+                const current = contactGraph[current_idx];
+                const current_arrival = arrivalTimes[current_idx];
+                
+                if (current.to === dst) {
+                    best_end = current_idx;
+                    best_eta = current_arrival;
+                    break;
+                }
+                
+                contactGraph.forEach((neighbor, nj) => {
+                    if (!unvisited.has(nj)) return;
+                    if (neighbor.from !== current.to) return;
+                    
+                    const eta_n = current_arrival + neighbor.owlt + neighbor.setup_s;
+                    if (eta_n > neighbor.t_end) return;
+                    
+                    const new_dist = eta_n - t0;
+                    
+                    if (new_dist < distances[nj]) {
+                        distances[nj] = new_dist;
+                        arrivalTimes[nj] = eta_n;
+                        previous[nj] = current_idx;
+                    }
+                });
+            }
+            
+            if (best_end === null) {
+                return { found: false, eta: Infinity, latency: Infinity, hops: 0, contact_ids: [], nodes: [] };
+            }
+            
+            const path = [];
+            const nodes = [];
+            let cur = best_end;
+            while (cur !== null) {
+                path.unshift(contactGraph[cur].id);
+                nodes.unshift(contactGraph[cur].from);
+                cur = previous[cur];
+            }
+            nodes.push(dst);
+            
+            return {
+                found: true,
+                eta: best_eta,
+                latency: best_eta - t0,
+                hops: path.length,
+                contact_ids: path,
+                nodes: nodes
+            };
+        }
+
+        // ============ CGR ENHANCED ============
         function cgrEnhancedSearch(src, dst, t0, bundle_bytes) {
             const distances = {};
             const arrivalTimes = {};
@@ -841,11 +1039,11 @@
             contactGraph.forEach((c, idx) => {
                 if (c.from !== src) return;
                 
-                if (config.enablePrecheck && !contactIsViable(c, t0, bundle_bytes)) return;
+                if (!contactIsViable(c, t0, bundle_bytes)) return;
                 
                 let effective_setup = c.setup_s;
-                if (config.enableEWMA && edgeStates[idx]) {
-                    effective_setup += config.lambda * edgeStates[idx].penalty_s;
+                if (edgeStates[idx]) {
+                    effective_setup += 1.0 * edgeStates[idx].penalty_s;
                 }
                 
                 const eta = calculateETA({...c, setup_s: effective_setup}, t0, bundle_bytes);
@@ -870,7 +1068,6 @@
                 });
                 
                 if (current_idx === null || min_dist === Infinity) break;
-                
                 unvisited.delete(current_idx);
                 
                 const current = contactGraph[current_idx];
@@ -886,11 +1083,11 @@
                     if (!unvisited.has(nj)) return;
                     if (neighbor.from !== current.to) return;
                     
-                    if (config.enablePrecheck && !contactIsViable(neighbor, current_arrival, bundle_bytes)) return;
+                    if (!contactIsViable(neighbor, current_arrival, bundle_bytes)) return;
                     
                     let effective_setup = neighbor.setup_s;
-                    if (config.enableEWMA && edgeStates[nj]) {
-                        effective_setup += config.lambda * edgeStates[nj].penalty_s;
+                    if (edgeStates[nj]) {
+                        effective_setup += 1.0 * edgeStates[nj].penalty_s;
                     }
                     
                     const eta_n = calculateETA({...neighbor, setup_s: effective_setup}, current_arrival, bundle_bytes);
@@ -907,92 +1104,128 @@
             }
             
             if (best_end === null) {
-                return { found: false, eta: Infinity, latency: Infinity, hops: 0, contact_ids: [] };
+                return { found: false, eta: Infinity, latency: Infinity, hops: 0, contact_ids: [], nodes: [] };
             }
             
             const path = [];
+            const nodes = [];
             let cur = best_end;
             while (cur !== null) {
                 path.unshift(contactGraph[cur].id);
+                nodes.unshift(contactGraph[cur].from);
                 cur = previous[cur];
             }
+            nodes.push(dst);
             
             return {
                 found: true,
                 eta: best_eta,
                 latency: best_eta - t0,
                 hops: path.length,
-                contact_ids: path
+                contact_ids: path,
+                nodes: nodes
             };
         }
 
-        // ============ ALGORITMO DIJKSTRA CLÁSICO ============
-        function dijkstraClassic(src, dst, t0, bundle_bytes) {
-            const distances = {};
-            const previous = {};
-            const unvisited = new Set();
+        function contactIsViable(contact, t_arrival, bundle_bytes) {
+            if (t_arrival > contact.t_end) return false;
             
-            satellites.forEach(sat => {
-                distances[sat.id] = Infinity;
-                previous[sat.id] = null;
-                unvisited.add(sat.id);
-            });
+            const start_tx = Math.max(t_arrival, contact.t_start);
+            const window = contact.t_end - start_tx - contact.setup_s;
+            if (window <= 0) return false;
             
-            distances[src] = 0;
+            const rate = Math.max(contact.rate_bps, 1.0);
+            const cap_window = window * rate / 8;
+            const cap_actual = Math.min(contact.residual_bytes, cap_window);
             
-            while (unvisited.size > 0) {
-                let current = null;
-                let min_dist = Infinity;
-                
-                unvisited.forEach(id => {
-                    if (distances[id] < min_dist) {
-                        min_dist = distances[id];
-                        current = id;
-                    }
-                });
-                
-                if (current === null || current === dst) break;
-                
-                unvisited.delete(current);
-                
-                contactGraph.forEach(c => {
-                    if (c.from !== current) return;
-                    
-                    const cost = c.owlt + c.setup_s;
-                    const alt = distances[current] + cost;
-                    
-                    if (alt < distances[c.to]) {
-                        distances[c.to] = alt;
-                        previous[c.to] = current;
-                    }
-                });
+            if (cap_actual < bundle_bytes) return false;
+            
+            const tx_time = bundle_bytes / (rate / 8);
+            const finish = start_tx + contact.setup_s + tx_time;
+            if (finish > contact.t_end) return false;
+            
+            return true;
+        }
+
+        function calculateETA(contact, t_in, bundle_bytes) {
+            if (!contactIsViable(contact, t_in, bundle_bytes)) return Infinity;
+            
+            const start_tx = Math.max(t_in, contact.t_start);
+            const rate = Math.max(contact.rate_bps, 1.0) / 8;
+            const tx_time = bundle_bytes / rate;
+            
+            const finish = start_tx + contact.setup_s + tx_time;
+            const eta = finish + contact.owlt;
+            
+            return eta;
+        }
+
+        // ============ SELECCIÓN AUTOMÁTICA DE ALGORITMO ============
+        function selectBestAlgorithm() {
+            if (config.routingAlgorithm !== 'auto') {
+                return config.routingAlgorithm === 'cgr-enhanced' ? 'enhanced' : 'classic';
             }
             
-            if (distances[dst] === Infinity) {
-                return { found: false, eta: Infinity, latency: Infinity, hops: 0, contact_ids: [] };
+            if (performanceStats.classic === 0 && performanceStats.enhanced === 0) {
+                return 'enhanced';
             }
             
-            const path = [];
-            let cur = dst;
-            while (previous[cur] !== null) {
-                path.unshift(cur);
-                cur = previous[cur];
-            }
+            return performanceStats.enhanced <= performanceStats.classic * 1.2 ? 'enhanced' : 'classic';
+        }
+
+        // ============ RECÁLCULO DINÁMICO DE RUTAS ============
+        function replanRoute() {
+            if (satellites.length < 2) return;
+
+            const t0 = simulationTime;
+            const bundle_bytes = config.bundleSize;
             
-            return {
-                found: true,
-                eta: t0 + distances[dst],
-                latency: distances[dst],
-                hops: path.length,
-                contact_ids: path
-            };
+            const startClassic = performance.now();
+            const routeClassic = cgrClassicSearch(sourceNode.id, destNode.id, t0, bundle_bytes);
+            performanceStats.classic = performance.now() - startClassic;
+            
+            const startEnhanced = performance.now();
+            const routeEnhanced = cgrEnhancedSearch(sourceNode.id, destNode.id, t0, bundle_bytes);
+            performanceStats.enhanced = performance.now() - startEnhanced;
+            
+            const selectedAlgo = selectBestAlgorithm();
+            const route = selectedAlgo === 'enhanced' ? routeEnhanced : routeClassic;
+            
+            document.getElementById('activeAlgo').textContent = 
+                selectedAlgo === 'enhanced' ? 'CGR Enhanced' : 'CGR Clásico';
+            document.getElementById('calcTime').textContent = 
+                `${(selectedAlgo === 'enhanced' ? performanceStats.enhanced : performanceStats.classic).toFixed(2)} ms`;
+
+            if (route && route.found) {
+                currentRoute = route;
+                visualizeRoute(route);
+                
+                if (routeClassic.found && routeEnhanced.found) {
+                    const improvement = ((routeClassic.latency - routeEnhanced.latency) / routeClassic.latency * 100);
+                    document.getElementById('efficiency').textContent = 
+                        `${improvement > 0 ? '+' : ''}${improvement.toFixed(1)}%`;
+                }
+            }
+
+            lastRecalcTime = simulationTime;
+            document.getElementById('lastRecalc').textContent = `${simulationTime.toFixed(1)} s`;
+            updateMetrics();
+            displayAlternativeRoutes();
+        }
+
+        function manualRecalc() {
+            buildContactGraph();
+            replanRoute();
         }
 
         // ============ K RUTAS YEN-LITE ============
         function kYenRoutes(src, dst, t0, bundle_bytes, k) {
             const routes = [];
+            const selectedAlgo = selectBestAlgorithm();
             
-            const base = cgrEnhancedSearch(src, dst, t0, bundle_bytes);
+            const base = selectedAlgo === 'enhanced' ?
+                         cgrEnhancedSearch(src, dst, t0, bundle_bytes) :
+                         cgrClassicSearch(src, dst, t0, bundle_bytes);
             if (base.found) routes.push(base);
             
             for (let i = 1; i < k && routes.length < k; i++) {
@@ -1005,7 +1238,9 @@
                         
                         const old_graph = contactGraph;
                         contactGraph = temp_graph;
-                        const alt = cgrEnhancedSearch(src, dst, t0, bundle_bytes);
+                        const alt = selectedAlgo === 'enhanced' ?
+                                   cgrEnhancedSearch(src, dst, t0, bundle_bytes) :
+                                   cgrClassicSearch(src, dst, t0, bundle_bytes);
                         contactGraph = old_graph;
                         
                         if (!alt.found) continue;
@@ -1051,9 +1286,10 @@
                 
                 for (let sat = 0; sat < satsPerPlane; sat++) {
                     const meanAnomalyStart = (sat * 360) / satsPerPlane;
+                    const satIndex = plane * satsPerPlane + sat;
                     
                     const satEntity = viewer.entities.add({
-                        name: `SAT-${plane * satsPerPlane + sat}`,
+                        name: `SAT-${satIndex}`,
                         position: new Cesium.CallbackProperty(() => {
                             return getSatellitePosition(plane, sat, meanAnomalyStart, inclination, raan);
                         }, false),
@@ -1062,21 +1298,11 @@
                             color: Cesium.Color.CYAN,
                             outlineColor: Cesium.Color.WHITE,
                             outlineWidth: 2
-                        },
-                        label: {
-                            text: `S${plane * satsPerPlane + sat}`,
-                            font: '14px sans-serif',
-                            fillColor: Cesium.Color.WHITE,
-                            outlineColor: Cesium.Color.BLACK,
-                            outlineWidth: 2,
-                            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-                            pixelOffset: new Cesium.Cartesian2(0, -15)
                         }
                     });
 
                     satellites.push({
-                        id: plane * satsPerPlane + sat,
+                        id: satIndex,
                         entity: satEntity,
                         plane: plane,
                         index: sat,
@@ -1104,7 +1330,7 @@
         }
 
         function getSatellitePosition(plane, sat, meanAnomalyStart, inclination, raan) {
-            const orbitalPeriod = 5760;
+            const orbitalPeriod = 6000;
             const meanMotion = (2 * Math.PI) / orbitalPeriod;
             const meanAnomaly = meanAnomalyStart + (meanMotion * simulationTime * config.simSpeed * 180 / Math.PI);
             
@@ -1135,15 +1361,15 @@
                 satellites.forEach((sat2, j) => {
                     if (i >= j) return;
 
-                    const windows = calculateContactWindows(sat1, sat2, currentTime, horizonEnd);
+                    const windows = findOptimalContactWindows(sat1, sat2, currentTime, horizonEnd);
                     
                     windows.forEach(window => {
                         const distance = window.distance;
-                        const isOptical = distance < 2500000;
-                        const bandwidth = isOptical ? 150e6 : 10e6;
+                        const isOptical = distance < 2800000;
+                        const bandwidth = isOptical ? 200e6 : 25e6;
                         const latency = (distance / 299792458);
-                        const reliability = isOptical ? 0.95 : 0.85;
-                        const residual_bytes = (isOptical ? 500 : 100) * 1e6;
+                        const reliability = isOptical ? 0.98 : 0.90;
+                        const residual_bytes = (isOptical ? 800 : 150) * 1e6;
 
                         contactGraph.push({
                             id: contact_id++,
@@ -1155,16 +1381,16 @@
                             type: isOptical ? 'optical' : 'rf',
                             rate_bps: bandwidth,
                             owlt: latency,
-                            setup_s: 0.1,
+                            setup_s: 0.05,
                             residual_bytes: residual_bytes,
-                            reliability: reliability
+                            reliability: reliability,
+                            quality: window.quality
                         });
 
-                        // Visualizar enlaces activos
                         if (window.start <= currentTime && window.end >= currentTime) {
                             const color = isOptical ? 
-                                Cesium.Color.CYAN.withAlpha(0.5) :  // Aumentada opacidad
-                                Cesium.Color.ORANGE.withAlpha(0.4);  // Aumentada opacidad
+                                Cesium.Color.CYAN.withAlpha(0.4) :
+                                Cesium.Color.ORANGE.withAlpha(0.3);
 
                             const link = viewer.entities.add({
                                 polyline: {
@@ -1175,7 +1401,7 @@
                                             sat2.entity.position.getValue(time)
                                         ];
                                     }, false),
-                                    width: isOptical ? 3 : 2,  // Aumentado grosor
+                                    width: isOptical ? 2 : 1,
                                     material: color
                                 }
                             });
@@ -1187,85 +1413,7 @@
 
             updateContactList();
             updateMetrics();
-        }
-
-        function calculateContactWindows(sat1, sat2, startTime, endTime) {
-            const windows = [];
-            const timeStep = 30;  // Reducido para más suavidad
-            const maxDistance = 3000000;
-
-            let inContact = false;
-            let windowStart = null;
-            let windowDistance = 0;
-
-            for (let t = startTime; t <= endTime; t += timeStep) {
-                const tempTime = t;
-                simulationTime = tempTime;
-                
-                const pos1 = getSatellitePosition(sat1.plane, sat1.index, sat1.meanAnomalyStart, sat1.inclination, sat1.raan);
-                const pos2 = getSatellitePosition(sat2.plane, sat2.index, sat2.meanAnomalyStart, sat2.inclination, sat2.raan);
-                
-                const distance = Cesium.Cartesian3.distance(pos1, pos2);
-
-                if (distance <= maxDistance && !inContact) {
-                    inContact = true;
-                    windowStart = t;
-                    windowDistance = distance;
-                } else if ((distance > maxDistance || t === endTime) && inContact) {
-                    inContact = false;
-                    windows.push({
-                        start: windowStart,
-                        end: t,
-                        distance: windowDistance
-                    });
-                }
-            }
-
-            simulationTime = startTime;
-            return windows;
-        }
-
-        // ============ REPLANIFICAR RUTA ============
-        function replanRoute() {
-            if (satellites.length < 2) return;
-
-            const algo = config.routingAlgorithm;
-            const t0 = simulationTime;
-            const bundle_bytes = config.bundleSize;
-
-            let route = null;
-
-            switch(algo) {
-                case 'dijkstra':
-                    route = dijkstraClassic(sourceNode.id, destNode.id, t0, bundle_bytes);
-                    break;
-                case 'cgr-classic':
-                case 'cgr-enhanced':
-                    route = cgrEnhancedSearch(sourceNode.id, destNode.id, t0, bundle_bytes);
-                    break;
-                case 'cgr-ml':
-                    route = cgrEnhancedSearch(sourceNode.id, destNode.id, t0, bundle_bytes);
-                    break;
-            }
-
-            if (route && route.found) {
-                currentRoute = route;
-                
-                if (config.enableEWMA && route.hops > 0) {
-                    const first_contact_id = route.contact_ids[0];
-                    const first_contact = contactGraph.find(c => c.id === first_contact_id);
-                    if (first_contact) {
-                        const wait_time = Math.max(0, first_contact.t_start - t0);
-                        applyEWMA(first_contact_id, wait_time);
-                    }
-                }
-                
-                consumeCapacity(route, bundle_bytes);
-                visualizeRoute(route);
-            }
-
-            updateMetrics();
-            displayAlternativeRoutes();
+            detectCollisions();
         }
 
         // ============ VISUALIZAR RUTA ============
@@ -1294,9 +1442,9 @@
                                 sat2.entity.position.getValue(time)
                             ];
                         }, false),
-                        width: 5,
+                        width: 6,
                         material: new Cesium.PolylineGlowMaterialProperty({
-                            glowPower: 0.4,
+                            glowPower: 0.5,
                             color: Cesium.Color.LIME
                         })
                     }
@@ -1312,36 +1460,12 @@
             ).length;
             document.getElementById('activeContacts').textContent = activeLinks;
 
-            const futureLinks = contactGraph.filter(c => 
-                c.t_start > simulationTime && c.t_start < simulationTime + config.planningHorizon
-            ).length;
-            document.getElementById('futureContacts').textContent = futureLinks;
-
-            const totalCap = contactGraph.reduce((sum, c) => sum + c.residual_bytes, 0) / 1e9;
-            document.getElementById('totalCapacity').textContent = `${totalCap.toFixed(2)} GB`;
-
             if (currentRoute && currentRoute.found) {
-                document.getElementById('routeETA').textContent = `${currentRoute.eta.toFixed(3)} s`;
                 document.getElementById('routeLatency').textContent = `${currentRoute.latency.toFixed(3)} s`;
                 document.getElementById('routeHops').textContent = currentRoute.hops;
-                
-                const minThroughput = Math.min(...currentRoute.contact_ids.map(id => {
-                    const c = contactGraph.find(c => c.id === id);
-                    return c ? c.rate_bps / 1e9 : 0;
-                }));
-                document.getElementById('routeThroughput').textContent = `${minThroughput.toFixed(1)} Gbps`;
-                
-                const reliability = currentRoute.contact_ids.reduce((prod, id) => {
-                    const c = contactGraph.find(c => c.id === id);
-                    return prod * (c ? c.reliability : 1);
-                }, 1);
-                document.getElementById('routeReliability').textContent = `${(reliability * 100).toFixed(1)}%`;
             } else {
-                document.getElementById('routeETA').textContent = '-';
                 document.getElementById('routeLatency').textContent = '-';
                 document.getElementById('routeHops').textContent = '0';
-                document.getElementById('routeThroughput').textContent = '-';
-                document.getElementById('routeReliability').textContent = '-';
             }
         }
 
@@ -1357,8 +1481,7 @@
                 div.className = 'route-step';
                 div.innerHTML = `
                     <strong>Ruta #${idx + 1}</strong><br>
-                    ETA: ${route.eta.toFixed(3)} s | Latencia: ${route.latency.toFixed(3)} s | Hops: ${route.hops}<br>
-                    Path: ${route.contact_ids.map(id => `<span class="route-hop">${id}</span>`).join(' → ')}
+                    Latencia: ${route.latency.toFixed(3)} s | Saltos: ${route.hops}
                 `;
                 container.appendChild(div);
             });
@@ -1372,30 +1495,29 @@
             const relevantContacts = contactGraph
                 .filter(c => c.t_start < simulationTime + config.planningHorizon)
                 .sort((a, b) => a.t_start - b.t_start)
-                .slice(0, 12);
+                .slice(0, 10);
 
             relevantContacts.forEach(contact => {
                 const isActive = simulationTime >= contact.t_start && simulationTime < contact.t_end;
                 const isExpired = simulationTime >= contact.t_end;
+                
+                const sat1 = satellites.find(s => s.id === contact.from);
+                const sat2 = satellites.find(s => s.id === contact.to);
 
                 const div = document.createElement('div');
                 div.className = `contact-window ${isActive ? 'active' : ''} ${isExpired ? 'expired' : ''}`;
                 div.innerHTML = `
                     <div class="contact-info">
-                        <span class="contact-label">Contact ${contact.id}:</span>
-                        <span class="contact-value">S${contact.from} → S${contact.to}</span>
+                        <span class="contact-label">Enlace ${contact.id}:</span>
+                        <span class="contact-value">SAT-${sat1?.id || 'N/A'} → SAT-${sat2?.id || 'N/A'}</span>
                     </div>
                     <div class="contact-info">
-                        <span class="contact-label">Window:</span>
+                        <span class="contact-label">Ventana:</span>
                         <span class="contact-value">[${contact.t_start.toFixed(0)}s, ${contact.t_end.toFixed(0)}s]</span>
                     </div>
                     <div class="contact-info">
-                        <span class="contact-label">Type:</span>
-                        <span class="contact-value">${contact.type === 'optical' ? '🔵 Optical' : '🟠 RF'} | ${(contact.rate_bps / 1e6).toFixed(0)} Mbps</span>
-                    </div>
-                    <div class="contact-info">
-                        <span class="contact-label">Residual:</span>
-                        <span class="contact-value">${(contact.residual_bytes / 1e6).toFixed(1)} MB</span>
+                        <span class="contact-label">Tipo:</span>
+                        <span class="contact-value">${contact.type === 'optical' ? 'Optical' : 'RF'} | ${(contact.rate_bps / 1e6).toFixed(0)} Mbps</span>
                     </div>
                 `;
                 container.appendChild(div);
@@ -1407,24 +1529,10 @@
             const t0 = simulationTime;
             const bundle_bytes = config.bundleSize;
 
-            const dijkstra = dijkstraClassic(sourceNode.id, destNode.id, t0, bundle_bytes);
-            const cgr = cgrEnhancedSearch(sourceNode.id, destNode.id, t0, bundle_bytes);
+            const baseline = cgrClassicSearch(sourceNode.id, destNode.id, t0, bundle_bytes);
+            const enhanced = cgrEnhancedSearch(sourceNode.id, destNode.id, t0, bundle_bytes);
 
-            document.getElementById('dijkstraMetric').textContent = dijkstra.found ? 
-                `${dijkstra.latency.toFixed(3)} s` : 'No route';
-            document.getElementById('cgrEnhancedMetric').textContent = cgr.found ? 
-                `${cgr.latency.toFixed(3)} s` : 'No route';
-
-            const improvement = document.getElementById('improvementDisplay');
-            if (dijkstra.found && cgr.found) {
-                const percent = ((dijkstra.latency - cgr.latency) / dijkstra.latency * 100);
-                const isPositive = percent > 0;
-                improvement.innerHTML = `
-                    <div class="improvement-badge ${isPositive ? '' : 'improvement-negative'}">
-                        ${isPositive ? '↓' : '↑'} ${Math.abs(percent).toFixed(1)}% ${isPositive ? 'Mejora' : 'Peor'}
-                    </div>
-                `;
-            }
+            alert(`Comparación de Algoritmos:\n\nCGR Clásico:\n- Latencia: ${baseline.found ? baseline.latency.toFixed(3) + ' s' : 'No route'}\n- Tiempo cálculo: ${performanceStats.classic.toFixed(2)} ms\n\nCGR Enhanced:\n- Latencia: ${enhanced.found ? enhanced.latency.toFixed(3) + ' s' : 'No route'}\n- Tiempo cálculo: ${performanceStats.enhanced.toFixed(2)} ms\n\nMejora: ${baseline.found && enhanced.found ? ((baseline.latency - enhanced.latency) / baseline.latency * 100).toFixed(1) + '%' : 'N/A'}`);
         }
 
         // ============ EVENT LISTENERS ============
@@ -1454,6 +1562,12 @@
             replanRoute();
         });
 
+        document.getElementById('recalcFreq').addEventListener('input', (e) => {
+            config.recalcFreq = parseInt(e.target.value);
+            document.getElementById('recalcDisplay').textContent = config.recalcFreq;
+            e.target.style.setProperty('--value', `${((config.recalcFreq - 1) / 9) * 100}%`);
+        });
+
         document.getElementById('planningHorizon').addEventListener('change', (e) => {
             config.planningHorizon = parseInt(e.target.value) * 60;
             buildContactGraph();
@@ -1464,22 +1578,15 @@
             replanRoute();
         });
 
-        document.getElementById('enableConsume').addEventListener('change', (e) => {
-            config.enableConsume = e.target.checked;
-        });
-
-        document.getElementById('enableEWMA').addEventListener('change', (e) => {
-            config.enableEWMA = e.target.checked;
-        });
-
-        document.getElementById('enablePrecheck').addEventListener('change', (e) => {
-            config.enablePrecheck = e.target.checked;
-        });
-
         document.getElementById('kRoutes').addEventListener('input', (e) => {
             config.kRoutes = parseInt(e.target.value);
             document.getElementById('kDisplay').textContent = config.kRoutes;
             e.target.style.setProperty('--value', `${((config.kRoutes - 1) / 9) * 100}%`);
+        });
+
+        document.getElementById('safeDistance').addEventListener('change', (e) => {
+            config.safeDistance = parseInt(e.target.value) * 1000;
+            detectCollisions();
         });
 
         function toggleAnimation() {
@@ -1490,23 +1597,33 @@
             viewer.camera.flyHome(1);
         }
 
-        // ============ ACTUALIZACIÓN CONTINUA (Más suave) ============
+        // ============ ACTUALIZACIÓN CONTINUA CON RECÁLCULO DINÁMICO ============
         let lastUpdateTime = Date.now();
+        let frameCounter = 0;
+        
         function smoothUpdate() {
             const now = Date.now();
-            const deltaTime = (now - lastUpdateTime) / 1000; // segundos
+            const deltaTime = (now - lastUpdateTime) / 1000;
             lastUpdateTime = now;
             
             if (viewer.clock.shouldAnimate) {
                 simulationTime += deltaTime * config.simSpeed;
+                frameCounter++;
                 
-                // Actualizar métricas cada segundo (no en cada frame)
-                if (Math.floor(simulationTime) % 1 === 0) {
+                if (frameCounter % 30 === 0) {
                     updateMetrics();
                 }
                 
-                // Reconstruir grafo cada 10 segundos
-                if (Math.floor(simulationTime) % 10 === 0) {
+                if (frameCounter % 60 === 0) {
+                    detectCollisions();
+                }
+                
+                if (simulationTime - lastRecalcTime >= config.recalcFreq) {
+                    buildContactGraph();
+                    replanRoute();
+                }
+                
+                if (frameCounter % 300 === 0) {
                     buildContactGraph();
                 }
             }
@@ -1514,7 +1631,6 @@
             requestAnimationFrame(smoothUpdate);
         }
         
-        // Iniciar el loop de actualización suave
         smoothUpdate();
 
         // ============ INICIALIZACIÓN ============
@@ -1522,16 +1638,7 @@
         viewer.clock.shouldAnimate = true;
         
         createConstellation();
-        
-        viewer.camera.flyTo({
-            destination: Cesium.Cartesian3.fromDegrees(0, 30, 15000000),
-            orientation: {
-                heading: 0,
-                pitch: Cesium.Math.toRadians(-45),
-                roll: 0
-            },
-            duration: 2
-        });
+        viewer.camera.flyHome(0);
     </script>
 </body>
 </html>
