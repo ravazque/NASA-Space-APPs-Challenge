@@ -33,16 +33,11 @@ The goal is to enable **rapid experiments** and exploration of routing decisions
 
 ## 2) How to run and view the visualization
 
-**Option A: Local (fastest)**
+**Local**
 
 1. Download or clone the repository.
 2. Open **`index.html`** in your browser (double‑click or `File → Open`). No backend is required for the basic visualization.
-
-**Option B: GitHub Pages (optional)**
-
-1. In GitHub, go to **Settings → Pages**.
-2. Publish branch `main` (root folder).
-3. Access the visualization through the generated GitHub Pages URL.
+3. There is also a link at the beginning of this documentation that will take you to our project.
 
 **CGR & Prediction services (simulated/remote):**
 
