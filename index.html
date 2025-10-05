@@ -159,9 +159,9 @@
 
     <div class="algo-info">
       <strong>Conceptos clave:</strong><br>
-      <b>Bundle Size</b>: tamaño estimado del “paquete” a enrutar; afecta la elegibilidad de ventanas (setup/tiempos).<br>
-      <b>Planning Horizon</b>: ventana de tiempo hacia delante (en minutos) en la que se planifican rutas y contactos.<br>
-      <b>Recalculation Frequency</b>: periodo (s) para recalcular rutas/contactos y adaptarse a cambios.
+      <b>Recalculation Frequency</b>: period (s) to recalculate routes/contacts and adapt to changes.
+      <b>Planning Horizon</b>: forward time window (in minutes) in which routes and contacts are planned.<br>
+      <b>Bundle Size</b>: estimated size of the “package” to be routed; affects window eligibility (setup/times).<br>
     </div>
 
     <h3>Alternative Routes</h3>
@@ -170,8 +170,8 @@
       <input type="range" id="kRoutes" min="1" max="10" value="3" step="1" style="--value: 22%">
       <div class="algo-info" style="margin-top:10px">
         <strong>What are K Routes?</strong><br>
-        Genera las <em>k</em> mejores rutas como alternativas a la óptima.<br>
-        <u>Impacto</u>: aumentar <em>k</em> mejora robustez/selección, pero incrementa el coste de cómputo.
+        Generate the <em>k</em> best routes as alternatives to the optimal route.<br>
+        <u>Impact</u>: increase <em>k</em> improves robustness/selection, but increases computational cost.
       </div>
     </div>
 
@@ -181,9 +181,9 @@
       <div class="legend-item"><div class="legend-color normal"></div><span><strong>Cyan:</strong> Regular Satellite</span></div>
     </div>
 
-    <button onclick="changeSenderReceiver()">🔄 Change Source & Destination</button>
-    <button onclick="toggleAnimation()" class="secondary">⏯️ Play/Pause</button>
-    <button onclick="resetView()" class="secondary">🏠 Reset View</button>
+    <button onclick="changeSenderReceiver()">Change Source & Destination</button>
+    <button onclick="toggleAnimation()" class="secondary">Play/Pause</button>
+    <button onclick="resetView()" class="secondary">Reset View</button>
   </div>
 
   <!-- Right Panel -->
