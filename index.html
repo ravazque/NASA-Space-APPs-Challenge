@@ -24,7 +24,7 @@
     #leftPanel { top: 20px; left: 20px; width: 420px; max-height: calc(100vh - 40px); overflow-y: auto; }
     #rightPanel { top: 20px; right: 20px; width: 480px; max-height: calc(100vh - 40px); overflow-y: auto; }
 
-    /* Bottom panel: evitar superposiciones */
+    /* Bottom panel: constrain content to avoid overflow overlay */
     #bottomPanel {
       bottom: 20px; left: 50%; transform: translateX(-50%);
       width: 700px; max-height: 350px; transition: max-height 0.3s ease; overflow: hidden;
@@ -158,10 +158,10 @@
     </div>
 
     <div class="algo-info">
-      <strong>Conceptos clave:</strong><br>
-      <b>Recalculation Frequency</b>: period (s) to recalculate routes/contacts and adapt to changes.
-      <b>Planning Horizon</b>: forward time window (in minutes) in which routes and contacts are planned.<br>
-      <b>Bundle Size</b>: estimated size of the “package” to be routed; affects window eligibility (setup/times).<br>
+      <strong>Key concepts:</strong><br>
+      <b>Bundle Size</b>: estimated DTN bundle size; influences contact eligibility (setup/available time).<br>
+      <b>Planning Horizon</b>: forward time window (minutes) to plan contacts and routes.<br>
+      <b>Recalculation Frequency</b>: period (s) to recompute contacts/routes and adapt to changes.
     </div>
 
     <h3>Alternative Routes</h3>
@@ -170,8 +170,8 @@
       <input type="range" id="kRoutes" min="1" max="10" value="3" step="1" style="--value: 22%">
       <div class="algo-info" style="margin-top:10px">
         <strong>What are K Routes?</strong><br>
-        Generate the <em>k</em> best routes as alternatives to the optimal route.<br>
-        <u>Impact</u>: increase <em>k</em> improves robustness/selection, but increases computational cost.
+        Compute the <em>k</em> best alternative routes in addition to the optimal one.<br>
+        <u>Impact</u>: higher <em>k</em> increases robustness and choice diversity, at a higher compute cost.
       </div>
     </div>
 
@@ -264,7 +264,7 @@
     viewer.scene.globe.showGroundAtmosphere = true;
 
     // =============== CONSTANTS ===============
-    const EARTH_RADIUS = 6_371_000; // m
+    const EARTH_RADIUS = 6_371_000; // meters
     const C = 299_792_458; // m/s
 
     // =============== STATE ===============
@@ -282,21 +282,21 @@
     // =============== CONFIG ===============
     let config = {
       satCount: 27,
-      altitude: 600_000,         // m
+      altitude: 600_000,         // meters
       simSpeed: 20,
-      planningHorizon: 30 * 60,  // s
-      bundleSize: 10 * 1e6,      // bytes (empieza en 10 MB)
+      planningHorizon: 30 * 60,  // seconds
+      bundleSize: 10 * 1e6,      // bytes
       routingAlgorithm: 'cgr-enhanced',
       kRoutes: 3,
-      safeDistance: 750_000,     // m (750 km)
+      safeDistance: 750_000,     // meters (750 km)
 
-      // Clasificación óptico en LEO con umbrales más realistas
+      // Optical vs RF classification thresholds in LEO (realistic/conservative)
       leoMinAlt: 160_000,        // 160 km
       leoMaxAlt: 2_000_000,      // 2000 km
-      opticalMaxDistInter: 2_500_000, // 2500 km entre planos
-      opticalMaxDistIntra: 3_000_000, // 3000 km intra-plano
+      opticalMaxDistInter: 2_500_000, // 2500 km inter-plane
+      opticalMaxDistIntra: 3_000_000, // 3000 km intra-plane
 
-      recalcFreq: 3              // s
+      recalcFreq: 3              // seconds
     };
 
     // =============== CLOCK ===============
@@ -351,7 +351,7 @@
     }
 
     // =============== ORBIT & POSITIONS ===============
-    const ORBITAL_PERIOD_SIM = 6000; // s (animación)
+    const ORBITAL_PERIOD_SIM = 6000; // seconds (animation period)
 
     function getSatellitePosition(plane, satIndex, meanAnomalyStart, inclination, raan, tSec) {
       const meanMotion = (2 * Math.PI) / ORBITAL_PERIOD_SIM;
@@ -376,7 +376,7 @@
         Cesium.Color.CYAN;
 
       sat.entity = viewer.entities.add({
-        name: `SAT-${sat.id}`,
+        // No label or name to avoid satellite names overlapping in the scene
         position: new Cesium.CallbackProperty(() => {
           const t = simSeconds();
           return getSatellitePosition(sat.plane, sat.index, sat.meanAnomalyStart, sat.inclination, sat.raan, t);
@@ -393,9 +393,9 @@
     function initConstellation(satCount, altitude) {
       clearSatellites();
 
-      const planes = Math.max(1, Math.round(satCount / 9)); // ej. 27 => 3 planos
+      const planes = Math.max(1, Math.round(satCount / 9)); // e.g., 27 => 3 planes
       const satsPerPlane = Math.round(satCount / planes);
-      const baseInclination = 53; // grados
+      const baseInclination = 53; // degrees
       const raanStep = 360 / planes;
 
       let idCounter = 1;
@@ -457,8 +457,8 @@
 
     function findOptimalContactWindows(s1, s2, startTime, endTime) {
       const windows = [];
-      const timeStep = 30;                // s
-      const maxDistance = 5_500_000;      // m
+      const timeStep = 30;                // seconds
+      const maxDistance = 5_500_000;      // meters
       let inContact = false;
       let windowStart = null;
       let bestDistance = Infinity;
@@ -492,7 +492,7 @@
       const t1 = t0 + config.planningHorizon;
       contactGraph = [];
 
-      // limpia enlaces visuales previos
+      // Clear previous visual links
       linkEntities.forEach(e => viewer.entities.remove(e));
       linkEntities = [];
 
@@ -503,7 +503,7 @@
 
           wins.forEach((w) => {
             const quality = calculateLinkQuality(w.distance, s1, s2);
-            const type = classifyLinkType(s1, s2, w.distance); // LEO + distancia → óptico (azul) o RF (naranja)
+            const type = classifyLinkType(s1, s2, w.distance); // LEO + distance → optical (blue) or RF (orange)
             const owlt = w.distance / C;
             const setup_s = 0.2 + (1 - quality) * 0.6;
 
@@ -515,7 +515,7 @@
 
             contactGraph.push(recF, recB);
 
-            // Dibuja enlace vivo (color por tipo)
+            // Draw live link (color by type)
             const ent = viewer.entities.add({
               polyline: {
                 positions: new Cesium.CallbackProperty(() => {
@@ -526,8 +526,8 @@
                 }, false),
                 width: 1.4,
                 material: (type === 'optical'
-                  ? Cesium.Color.fromCssColorString('#3b82f6')  // azul
-                  : Cesium.Color.fromCssColorString('#f59e0b')  // naranja
+                  ? Cesium.Color.fromCssColorString('#3b82f6')  // blue
+                  : Cesium.Color.fromCssColorString('#f59e0b')  // orange
                 ).withAlpha(0.5)
               }
             });
@@ -555,8 +555,8 @@
         if (active) div.classList.add('active');
         div.innerHTML = `
           <div class="contact-info"><span class="contact-label"><strong>${c.from} → ${c.to}</strong></span><span class="contact-value">${c.type === 'optical' ? 'OPTICAL (BLUE)' : 'RF (ORANGE)'}</span></div>
-          <div class="contact-info"><span class="contact-label">Start in:</span><span class="contact-value">${Math.max(0,(c.t_start - nowSec)).toFixed(0)} s</span></div>
-          <div class="contact-info"><span class="contact-label">End in:</span><span class="contact-value">${Math.max(0,(c.t_end - nowSec)).toFixed(0)} s</span></div>
+          <div class="contact-info"><span class="contact-label">Starts in:</span><span class="contact-value">${Math.max(0,(c.t_start - nowSec)).toFixed(0)} s</span></div>
+          <div class="contact-info"><span class="contact-label">Ends in:</span><span class="contact-value">${Math.max(0,(c.t_end - nowSec)).toFixed(0)} s</span></div>
           <div class="contact-info"><span class="contact-label">OWLT:</span><span class="contact-value">${(c.owlt*1000).toFixed(1)} ms</span></div>
           <div class="contact-info"><span class="contact-label">Q:</span><span class="contact-value">${(c.quality).toFixed(2)}</span></div>
         `;
@@ -564,40 +564,40 @@
       });
     }
 
-    // =============== COLLISION PREVENTION (probabilidad, vel, TCA, DCA) ===============
+    // =============== COLLISION PREVENTION (probability, relative speed, TCA, DCA) ===============
     function clamp01(x){ return Math.max(0, Math.min(1, x)); }
 
     function detectCollisions() {
       collisionWarnings = [];
       const safeKm = config.safeDistance / 1000;
       const t = simSeconds();
-      const dt = 1.0; // s, paso para obtener velocidad aproximada
+      const dt = 1.0; // seconds, step to approximate velocity
 
       for (let i = 0; i < satellites.length; i++) {
         for (let j = i + 1; j < satellites.length; j++) {
           const a = satellites[i], b = satellites[j];
 
-          // posiciones ahora y en t+dt
+          // positions now and at t+dt
           const p1  = getSatellitePosition(a.plane, a.index, a.meanAnomalyStart, a.inclination, a.raan, t);
           const p2  = getSatellitePosition(b.plane, b.index, b.meanAnomalyStart, b.inclination, b.raan, t);
           const p1n = getSatellitePosition(a.plane, a.index, a.meanAnomalyStart, a.inclination, a.raan, t + dt);
           const p2n = getSatellitePosition(b.plane, b.index, b.meanAnomalyStart, b.inclination, b.raan, t + dt);
 
-          const r = Cesium.Cartesian3.subtract(p2, p1, new Cesium.Cartesian3());   // m
-          const v1 = Cesium.Cartesian3.subtract(p1n, p1, new Cesium.Cartesian3()); // m/s aprox (dt=1)
+          const r = Cesium.Cartesian3.subtract(p2, p1, new Cesium.Cartesian3());   // meters
+          const v1 = Cesium.Cartesian3.subtract(p1n, p1, new Cesium.Cartesian3()); // m/s approx (dt=1)
           const v2 = Cesium.Cartesian3.subtract(p2n, p2, new Cesium.Cartesian3());
-          const v = Cesium.Cartesian3.subtract(v2, v1, new Cesium.Cartesian3());   // relativa
+          const v = Cesium.Cartesian3.subtract(v2, v1, new Cesium.Cartesian3());   // relative
 
           const rKm = Cesium.Cartesian3.magnitude(r) / 1000;
           const vRel = Cesium.Cartesian3.magnitude(v); // m/s
           const closing = Cesium.Cartesian3.dot(r, v) < 0;
 
-          // TCA (aprox. lineal): t* = - (r·v)/|v|^2
+          // TCA (linearized): t* = - (r·v)/|v|^2
           const v2norm = vRel * vRel;
           let tca = (v2norm > 0) ? - Cesium.Cartesian3.dot(r, v) / v2norm : 0;
-          tca = Math.max(0, Math.min(900, tca)); // limitamos a 15 min
+          tca = Math.max(0, Math.min(900, tca)); // clamp to 0..15 min
 
-          // Distancia en TCA
+          // Distance at TCA
           const rAtTca = new Cesium.Cartesian3(
             r.x + v.x * tca,
             r.y + v.y * tca,
@@ -605,17 +605,17 @@
           );
           const dcaKm = Cesium.Cartesian3.magnitude(rAtTca) / 1000;
 
-          // Heurística de probabilidad (0..1) más estable:
-          // - d_rel>0 si DCA < safeKm; escala 0..1
-          // - t_factor mayor cuando TCA es corto
-          // - closing factor si se están acercando
+          // Heuristic probability:
+          // - distance term if DCA < safeKm
+          // - time factor higher if TCA is soon
+          // - extra factor if closing
           const d_rel = clamp01((safeKm - dcaKm) / safeKm);
-          const t_factor = 1 / (1 + tca / 300);     // 0..1, privilegia TCA corto
+          const t_factor = 1 / (1 + tca / 300);     // 0..1, favors short TCA
           const closing_factor = closing ? 1.0 : 0.6;
           let prob = clamp01(0.15 + 0.7 * d_rel) * t_factor * closing_factor;
 
           if (dcaKm < safeKm || rKm < safeKm * 1.1) {
-            const percent = Math.max(0.1, prob * 100); // evita 0.0% visual
+            const percent = Math.max(0.1, prob * 100); // avoid 0.0% visuals
             collisionWarnings.push({
               sat1: `SAT-${a.id}`,
               sat2: `SAT-${b.id}`,
@@ -676,7 +676,7 @@
         unvisited.add(i);
       }
 
-      // inicial desde src
+      // seed from src
       contacts.forEach((c, idx) => {
         if (c.from === srcId && c.t_start <= t0 && c.t_end > t0) {
           const eta = t0 + c.owlt + c.setup_s;
@@ -747,7 +747,7 @@
         unvisited.add(i);
       }
 
-      // seed con calidad
+      // quality-weighted seeding
       contacts.forEach((c, idx) => {
         if (c.from !== srcId) return;
         if (c.t_start > t0 || c.t_end <= t0) return;
@@ -789,7 +789,7 @@
           let effective_setup = n.setup_s;
           const qDiff = Math.abs((current.quality || 1) - (n.quality || 1));
           effective_setup += qDiff * 0.2;
-          // ligera preferencia por óptico en LEO
+          // slight preference for optical in LEO
           if (n.type === 'optical') effective_setup *= 0.85;
 
           const eta_n = arrivalTimes[current_idx] + n.owlt + effective_setup;
@@ -832,7 +832,7 @@
 
       if (!result.found) result = cgrClassicSearch(srcId, dstId, t0, bundle_bytes);
 
-      // último recurso: enlace directo si hay ventana válida
+      // last resort: direct link if a valid window exists
       if (!result.found) {
         const t1 = t0 + config.planningHorizon;
         let best = null;
@@ -1095,7 +1095,7 @@
     }
     boot();
 
-    // Expose
+    // Expose handlers for buttons
     window.changeSenderReceiver = changeSenderReceiver;
     window.toggleAnimation = toggleAnimation;
     window.resetView = resetView;
