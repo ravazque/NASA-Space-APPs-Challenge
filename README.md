@@ -1,5 +1,7 @@
 # EcoStation CGR — Collision Prediction & CGR Routing in LEO Constellations
 
+---
+
 > ⚠️ **Important notice**
 >
 > * The **collision prediction service that is not embedded in `index.html`** relies on an **external API** to operate.
