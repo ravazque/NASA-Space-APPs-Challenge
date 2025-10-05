@@ -7,7 +7,7 @@
 >
 > **Quick demo / visualization:** open `index.html` (at the repo root) directly in your browser. You can also publish the repo with **GitHub Pages** and access it via URL.
 >
-> **Repository:** [https://github.com/ravazque/NASA-Space-APPs-Challenge](https://github.com/ravazque/NASA-Space-APPs-Challenge)
+> **Program viewer from Github:** [Our interface](https://ravazque.github.io/NASA-Space-APPs-Challenge/)
 
 ---
 
