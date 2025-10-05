@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CGR Enhanced v3.2 - Dynamic LEO Routing (Fixed)</title>
+  <title>CGR Enhanced v3.4 - Dynamic LEO Routing</title>
   <script src="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Cesium.js"></script>
   <link href="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
   <style>
@@ -23,15 +23,22 @@
     }
     #leftPanel { top: 20px; left: 20px; width: 420px; max-height: calc(100vh - 40px); overflow-y: auto; }
     #rightPanel { top: 20px; right: 20px; width: 480px; max-height: calc(100vh - 40px); overflow-y: auto; }
-    #bottomPanel { bottom: 20px; left: 50%; transform: translateX(-50%); width: 700px; max-height: 350px; transition: all 0.3s ease; }
-    #bottomPanel.collapsed { max-height: 60px; }
+
+    /* Bottom panel: evitar superposiciones */
+    #bottomPanel {
+      bottom: 20px; left: 50%; transform: translateX(-50%);
+      width: 700px; max-height: 350px; transition: max-height 0.3s ease; overflow: hidden;
+    }
+    #bottomPanel.collapsed { max-height: 60px; overflow: hidden; }
     .toggle-header { cursor: pointer; user-select: none; display: flex; justify-content: space-between; align-items: center; }
     .toggle-icon { transition: transform 0.3s ease; }
     .toggle-icon.collapsed { transform: rotate(-90deg); }
+
     .header { margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid rgba(99, 102, 241, 0.3); }
     h2 { font-size: 22px; font-weight: 700; background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px; letter-spacing: -0.5px; }
     .subtitle { font-size: 12px; color: #94a3b8; font-weight: 500; text-transform: uppercase; letter-spacing: 0.8px; }
     h3 { margin: 25px 0 15px 0; font-size: 15px; color: #cbd5e1; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; border-left: 3px solid #6366f1; padding-left: 10px; }
+
     .section { background: rgba(30, 41, 59, 0.4); padding: 16px; border-radius: 10px; margin-bottom: 16px; border: 1px solid rgba(100, 116, 139, 0.15); transition: all 0.3s ease; }
     .section:hover { background: rgba(30, 41, 59, 0.6); border-color: rgba(99, 102, 241, 0.3); }
     label { display: block; margin-bottom: 10px; font-size: 13px; color: #cbd5e1; font-weight: 500; }
@@ -90,32 +97,23 @@
     .tab-content { display: none; }
     .tab-content.active { display: block; }
 
+    .collapsible-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+    #contactsTab, #collisionsTab { max-height: 240px; overflow-y: auto; padding-right: 6px; }
+
     ::-webkit-scrollbar { width: 10px; height: 10px; }
     ::-webkit-scrollbar-track { background: rgba(30, 41, 59, 0.5); border-radius: 5px; }
     ::-webkit-scrollbar-thumb { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); border-radius: 5px; }
     ::-webkit-scrollbar-thumb:hover { background: linear-gradient(135deg, #a855f7 0%, #6366f1 100%); }
-
-    .badge-new { background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%); color: white; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; margin-left: 8px; animation: blink 2s ease-in-out infinite; }
-    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
-
-    .sim-time {
-      position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
-      background: rgba(15, 23, 42, 0.95); color: #e2e8f0; padding: 10px 20px; border-radius: 8px;
-      font-family: 'SF Mono', monospace; font-size: 14px; border: 1px solid rgba(99, 102, 241, 0.3);
-    }
   </style>
 </head>
 <body>
   <div id="cesiumContainer"></div>
 
-  <!-- Simulation Time Display -->
-  <div class="sim-time">Simulation Time: <span id="simTimeDisplay">0.0</span> s</div>
-
   <!-- Left Panel -->
   <div id="leftPanel" class="panel">
     <div class="header">
       <h2>Advanced Configuration</h2>
-      <div class="subtitle">CGR Enhanced v3.2 <span class="badge-new">OPTIMIZED</span></div>
+      <div class="subtitle">CGR Enhanced v3.4 <span class="badge-new">OPTIMIZED</span></div>
     </div>
 
     <div class="section">
@@ -144,10 +142,6 @@
       </select>
     </div>
 
-    <div class="algo-info">
-      <strong>Enhanced Mode:</strong> Optimized CGR with quality-aware routing, intelligent pruning, and automatic fallback for maximum reliability.
-    </div>
-
     <div class="section">
       <label>Recalculation Frequency (s): <span class="value-badge" id="recalcDisplay">3</span></label>
       <input type="range" id="recalcFreq" min="1" max="10" value="3" step="1" style="--value: 22%">
@@ -160,13 +154,25 @@
 
     <div class="section">
       <label>Bundle Size (MB):</label>
-      <input type="number" id="bundleSize" value="2" min="1" max="500" step="1">
+      <input type="number" id="bundleSize" value="10" min="1" max="500" step="1">
+    </div>
+
+    <div class="algo-info">
+      <strong>Conceptos clave:</strong><br>
+      <b>Bundle Size</b>: tamaño estimado del “paquete” a enrutar; afecta la elegibilidad de ventanas (setup/tiempos).<br>
+      <b>Planning Horizon</b>: ventana de tiempo hacia delante (en minutos) en la que se planifican rutas y contactos.<br>
+      <b>Recalculation Frequency</b>: periodo (s) para recalcular rutas/contactos y adaptarse a cambios.
     </div>
 
     <h3>Alternative Routes</h3>
     <div class="section">
       <label>K Routes (Yen's Algorithm): <span class="value-badge" id="kDisplay">3</span></label>
       <input type="range" id="kRoutes" min="1" max="10" value="3" step="1" style="--value: 22%">
+      <div class="algo-info" style="margin-top:10px">
+        <strong>What are K Routes?</strong><br>
+        Genera las <em>k</em> mejores rutas como alternativas a la óptima.<br>
+        <u>Impacto</u>: aumentar <em>k</em> mejora robustez/selección, pero incrementa el coste de cómputo.
+      </div>
     </div>
 
     <div class="legend-box">
@@ -194,14 +200,14 @@
 
     <div class="metric-card">
       <div class="metric-row"><span class="metric-label">Active Links:</span><span class="metric-value highlight" id="activeContacts">0</span></div>
-      <div class="metric-row"><span class="metric-label">Last Recalculation:</span><span class="metric-value" id="lastRecalc">-</span></div>
+      <div class="metric-row"><span class="metric-label">Simulation Time:</span><span class="metric-value" id="simTimeMetric">0.0 s</span></div>
       <div class="metric-row"><span class="metric-label">Calculation Time:</span><span class="metric-value" id="calcTime">-</span></div>
     </div>
 
-    <h3>Collision Detection</h3>
+    <h3>Collision Prevention</h3>
     <div class="section">
       <label>Minimum Safe Distance (km):</label>
-      <input type="number" id="safeDistance" value="2" min="1" max="50" step="1">
+      <input type="number" id="safeDistance" value="750" min="1" max="5000" step="50">
     </div>
     <div id="collisionStatus"></div>
 
@@ -224,14 +230,14 @@
       </div>
       <span class="toggle-icon collapsed">▼</span>
     </div>
-    <div class="collapsible-content" id="contactWindowsContent" style="max-height: 0; overflow: hidden;">
+    <div class="collapsible-content" id="contactWindowsContent">
       <div class="tab-container">
         <div class="tab active" onclick="switchTab('contacts')">Contact Windows</div>
         <div class="tab" onclick="switchTab('collisions')">Collision Alerts</div>
       </div>
 
-      <div id="contactsTab" class="tab-content active"><div id="contactWindows" style="max-height: 240px; overflow-y: auto;"></div></div>
-      <div id="collisionsTab" class="tab-content"><div id="collisionsList" style="max-height: 240px; overflow-y: auto;"></div></div>
+      <div id="contactsTab" class="tab-content active"><div id="contactWindows"></div></div>
+      <div id="collisionsTab" class="tab-content"><div id="collisionsList"></div></div>
     </div>
   </div>
 
@@ -258,40 +264,42 @@
     viewer.scene.globe.showGroundAtmosphere = true;
 
     // =============== CONSTANTS ===============
-    const EARTH_RADIUS = 6_371_000; // meters
-    const GM = 3.986004418e14; // m^3/s^2 (no imprescindible para la animación simple)
-    const C = 299_792_458; // speed of light (m/s)
+    const EARTH_RADIUS = 6_371_000; // m
+    const C = 299_792_458; // m/s
 
     // =============== STATE ===============
-    let satellites = [];      // array de { id, plane, index, meanAnomalyStart, inclination, raan, entity }
-    let contactGraph = [];    // array de contactos (aristas temporales)
+    let satellites = [];
+    let contactGraph = [];
     let currentRoute = null;
-    let linkEntities = [];    // enlaces activos dibujados
-    let routeEntities = [];   // ruta activa dibujada
+    let linkEntities = [];
+    let routeEntities = [];
     let collisionWarnings = [];
     let activeTab = 'contacts';
 
     let sourceNode = null;
     let destNode = null;
 
-    // Métricas
-    let lastRecalcTime = 0;
-    let performanceStats = { classic: 0, enhanced: 0 };
-
     // =============== CONFIG ===============
     let config = {
       satCount: 27,
-      altitude: 600_000,         // meters
+      altitude: 600_000,         // m
       simSpeed: 20,
-      planningHorizon: 30 * 60,  // seconds
-      bundleSize: 2 * 1e6,       // bytes
+      planningHorizon: 30 * 60,  // s
+      bundleSize: 10 * 1e6,      // bytes (empieza en 10 MB)
       routingAlgorithm: 'cgr-enhanced',
       kRoutes: 3,
-      safeDistance: 2_000,       // meters
-      recalcFreq: 3              // seconds
+      safeDistance: 750_000,     // m (750 km)
+
+      // Clasificación óptico en LEO con umbrales más realistas
+      leoMinAlt: 160_000,        // 160 km
+      leoMaxAlt: 2_000_000,      // 2000 km
+      opticalMaxDistInter: 2_500_000, // 2500 km entre planos
+      opticalMaxDistIntra: 3_000_000, // 3000 km intra-plano
+
+      recalcFreq: 3              // s
     };
 
-    // =============== CLOCK (ÚNICA FUENTE DE TIEMPO) ===============
+    // =============== CLOCK ===============
     const startJD = Cesium.JulianDate.now();
     const stopJD  = Cesium.JulianDate.addDays(startJD, 1, new Cesium.JulianDate());
     viewer.clock.startTime   = startJD.clone();
@@ -309,7 +317,7 @@
     function toggleBottomPanel() {
       const panel = document.getElementById('bottomPanel');
       const content = document.getElementById('contactWindowsContent');
-      const icon = document.querySelector('.toggle-icon');
+      const icon = document.querySelector('#bottomPanel .toggle-icon');
       if (panel.classList.contains('collapsed')) {
         panel.classList.remove('collapsed');
         content.style.maxHeight = '280px';
@@ -323,13 +331,13 @@
 
     function switchTab(tabName) {
       activeTab = tabName;
-      document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+      document.querySelectorAll('#bottomPanel .tab').forEach(tab => tab.classList.remove('active'));
+      document.querySelectorAll('#bottomPanel .tab-content').forEach(content => content.classList.remove('active'));
       if (tabName === 'contacts') {
-        document.querySelector('.tab:nth-child(1)').classList.add('active');
+        document.querySelector('#bottomPanel .tab:nth-child(1)').classList.add('active');
         document.getElementById('contactsTab').classList.add('active');
       } else {
-        document.querySelector('.tab:nth-child(2)').classList.add('active');
+        document.querySelector('#bottomPanel .tab:nth-child(2)').classList.add('active');
         document.getElementById('collisionsTab').classList.add('active');
       }
     }
@@ -343,8 +351,7 @@
     }
 
     // =============== ORBIT & POSITIONS ===============
-    // Animación simplificada con período artificial (para ver movimiento suave)
-    const ORBITAL_PERIOD_SIM = 6000; // s
+    const ORBITAL_PERIOD_SIM = 6000; // s (animación)
 
     function getSatellitePosition(plane, satIndex, meanAnomalyStart, inclination, raan, tSec) {
       const meanMotion = (2 * Math.PI) / ORBITAL_PERIOD_SIM;
@@ -374,17 +381,7 @@
           const t = simSeconds();
           return getSatellitePosition(sat.plane, sat.index, sat.meanAnomalyStart, sat.inclination, sat.raan, t);
         }, false),
-        point: { pixelSize: 8, color: color, outlineWidth: 2, outlineColor: Cesium.Color.WHITE },
-        label: {
-          text: `S${sat.id}`,
-          font: '12px monospace',
-          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-          fillColor: Cesium.Color.WHITE,
-          outlineColor: Cesium.Color.BLACK,
-          outlineWidth: 2,
-          pixelOffset: new Cesium.Cartesian2(0, -18),
-          disableDepthTestDistance: Number.POSITIVE_INFINITY
-        }
+        point: { pixelSize: 8, color: color, outlineWidth: 2, outlineColor: Cesium.Color.WHITE }
       });
     }
 
@@ -396,7 +393,7 @@
     function initConstellation(satCount, altitude) {
       clearSatellites();
 
-      const planes = Math.max(1, Math.round(satCount / 9)); // p.ej., 27 => 3 planos
+      const planes = Math.max(1, Math.round(satCount / 9)); // ej. 27 => 3 planos
       const satsPerPlane = Math.round(satCount / planes);
       const baseInclination = 53; // grados
       const raanStep = 360 / planes;
@@ -412,7 +409,7 @@
             plane: p,
             index: s,
             meanAnomalyStart,
-            inclination: baseInclination + (p % 2 === 0 ? 0 : 5), // un poco de variación
+            inclination: baseInclination + (p % 2 === 0 ? 0 : 5),
             raan,
             entity: null
           };
@@ -420,11 +417,9 @@
         }
       }
 
-      // Ajusta exacto a satCount
       satellites = satellites.slice(0, satCount);
       satellites.forEach(addSatelliteEntity);
 
-      // Pick default source/destination si no existen
       if (!sourceNode) sourceNode = satellites[0];
       if (!destNode) destNode = satellites[satellites.length - 1];
       recolorSourceDest();
@@ -446,15 +441,24 @@
       const maxDist = 5_500_000; // 5500 km
       const distanceFactor = Math.max(0, 1 - (distance / maxDist)); // 0..1
       const planeDiversity = Math.abs(sat1.plane - sat2.plane) / 2;
-      const altitudeFactor = config.altitude < 600_000 ? 0.85 : 1.0;
+      const altitudeFactor = (config.altitude >= config.leoMinAlt && config.altitude <= config.leoMaxAlt) ? 1.0 : 0.7;
       const q = (distanceFactor * 0.6 + planeDiversity * 0.2 + altitudeFactor * 0.2);
       return Math.max(0.05, Math.min(1, q));
     }
 
+    function classifyLinkType(s1, s2, distance) {
+      const inLEO = (config.altitude >= config.leoMinAlt && config.altitude <= config.leoMaxAlt);
+      if (!inLEO) return 'rf';
+      const samePlane = (s1.plane === s2.plane);
+      const okIntra = samePlane && (distance <= config.opticalMaxDistIntra);
+      const okInter = !samePlane && (distance <= config.opticalMaxDistInter);
+      return (okIntra || okInter) ? 'optical' : 'rf';
+    }
+
     function findOptimalContactWindows(s1, s2, startTime, endTime) {
       const windows = [];
-      const timeStep = 30;                // seconds
-      const maxDistance = 5_500_000;      // meters
+      const timeStep = 30;                // s
+      const maxDistance = 5_500_000;      // m
       let inContact = false;
       let windowStart = null;
       let bestDistance = Infinity;
@@ -474,8 +478,7 @@
               windows.push({
                 start: windowStart,
                 end: t,
-                distance: bestDistance,
-                quality: calculateLinkQuality(bestDistance, s1, s2)
+                distance: bestDistance
               });
             }
           }
@@ -489,7 +492,7 @@
       const t1 = t0 + config.planningHorizon;
       contactGraph = [];
 
-      // Limpia enlaces visuales previos
+      // limpia enlaces visuales previos
       linkEntities.forEach(e => viewer.entities.remove(e));
       linkEntities = [];
 
@@ -497,27 +500,22 @@
         for (let j = i + 1; j < satellites.length; j++) {
           const s1 = satellites[i], s2 = satellites[j];
           const wins = findOptimalContactWindows(s1, s2, t0, t1);
-          wins.forEach((w, k) => {
-            const owlt = w.distance / C; // one-way light time
-            const setup_s = 0.2 + (1 - w.quality) * 0.6; // pequeño overhead dependiente de calidad
-            const type = (config.altitude < 600_000 && w.distance < 3_000_000) ? 'optical' : 'rf';
 
-            // id único estable
+          wins.forEach((w) => {
+            const quality = calculateLinkQuality(w.distance, s1, s2);
+            const type = classifyLinkType(s1, s2, w.distance); // LEO + distancia → óptico (azul) o RF (naranja)
+            const owlt = w.distance / C;
+            const setup_s = 0.2 + (1 - quality) * 0.6;
+
             const idF = `C_${s1.id}_${s2.id}_${Math.round(w.start)}`;
             const idB = `C_${s2.id}_${s1.id}_${Math.round(w.start)}`;
 
-            contactGraph.push({
-              id: idF, from: s1.id, to: s2.id,
-              t_start: w.start, t_end: w.end,
-              owlt, setup_s, type, quality: w.quality
-            });
-            contactGraph.push({
-              id: idB, from: s2.id, to: s1.id,
-              t_start: w.start, t_end: w.end,
-              owlt, setup_s, type, quality: w.quality
-            });
+            const recF = { id: idF, from: s1.id, to: s2.id, t_start: w.start, t_end: w.end, owlt, setup_s, type, quality };
+            const recB = { id: idB, from: s2.id, to: s1.id, t_start: w.start, t_end: w.end, owlt, setup_s, type, quality };
 
-            // Dibuja enlace (callback para que se mueva)
+            contactGraph.push(recF, recB);
+
+            // Dibuja enlace vivo (color por tipo)
             const ent = viewer.entities.add({
               polyline: {
                 positions: new Cesium.CallbackProperty(() => {
@@ -526,8 +524,11 @@
                   const p2 = getSatellitePosition(s2.plane, s2.index, s2.meanAnomalyStart, s2.inclination, s2.raan, t);
                   return [p1, p2];
                 }, false),
-                width: 1.0,
-                material: Cesium.Color.fromCssColorString(type === 'optical' ? '#a855f7' : '#06b6d4').withAlpha(0.25)
+                width: 1.4,
+                material: (type === 'optical'
+                  ? Cesium.Color.fromCssColorString('#3b82f6')  // azul
+                  : Cesium.Color.fromCssColorString('#f59e0b')  // naranja
+                ).withAlpha(0.5)
               }
             });
             linkEntities.push(ent);
@@ -542,11 +543,10 @@
       const list = document.getElementById('contactWindows');
       list.innerHTML = '';
       const nowSec = simSeconds();
-      // Muestra 10 ventanas activas o próximas
       const soon = contactGraph
         .filter(c => c.t_end >= nowSec)
         .sort((a, b) => a.t_start - b.t_start)
-        .slice(0, 10);
+        .slice(0, 12);
 
       soon.forEach(c => {
         const div = document.createElement('div');
@@ -554,9 +554,9 @@
         const active = nowSec >= c.t_start && nowSec < c.t_end;
         if (active) div.classList.add('active');
         div.innerHTML = `
-          <div class="contact-info"><span class="contact-label"><strong>${c.from} → ${c.to}</strong></span><span class="contact-value">${c.type.toUpperCase()}</span></div>
-          <div class="contact-info"><span class="contact-label">Start:</span><span class="contact-value">${(c.t_start - nowSec).toFixed(0)} s</span></div>
-          <div class="contact-info"><span class="contact-label">End:</span><span class="contact-value">${(c.t_end - nowSec).toFixed(0)} s</span></div>
+          <div class="contact-info"><span class="contact-label"><strong>${c.from} → ${c.to}</strong></span><span class="contact-value">${c.type === 'optical' ? 'OPTICAL (BLUE)' : 'RF (ORANGE)'}</span></div>
+          <div class="contact-info"><span class="contact-label">Start in:</span><span class="contact-value">${Math.max(0,(c.t_start - nowSec)).toFixed(0)} s</span></div>
+          <div class="contact-info"><span class="contact-label">End in:</span><span class="contact-value">${Math.max(0,(c.t_end - nowSec)).toFixed(0)} s</span></div>
           <div class="contact-info"><span class="contact-label">OWLT:</span><span class="contact-value">${(c.owlt*1000).toFixed(1)} ms</span></div>
           <div class="contact-info"><span class="contact-label">Q:</span><span class="contact-value">${(c.quality).toFixed(2)}</span></div>
         `;
@@ -564,24 +564,67 @@
       });
     }
 
-    // =============== COLLISION DETECTION ===============
+    // =============== COLLISION PREVENTION (probabilidad, vel, TCA, DCA) ===============
+    function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+
     function detectCollisions() {
       collisionWarnings = [];
       const safeKm = config.safeDistance / 1000;
       const t = simSeconds();
+      const dt = 1.0; // s, paso para obtener velocidad aproximada
 
       for (let i = 0; i < satellites.length; i++) {
         for (let j = i + 1; j < satellites.length; j++) {
           const a = satellites[i], b = satellites[j];
-          const p1 = getSatellitePosition(a.plane, a.index, a.meanAnomalyStart, a.inclination, a.raan, t);
-          const p2 = getSatellitePosition(b.plane, b.index, b.meanAnomalyStart, b.inclination, b.raan, t);
-          const dKm = Cesium.Cartesian3.distance(p1, p2) / 1000;
-          if (dKm < safeKm) {
+
+          // posiciones ahora y en t+dt
+          const p1  = getSatellitePosition(a.plane, a.index, a.meanAnomalyStart, a.inclination, a.raan, t);
+          const p2  = getSatellitePosition(b.plane, b.index, b.meanAnomalyStart, b.inclination, b.raan, t);
+          const p1n = getSatellitePosition(a.plane, a.index, a.meanAnomalyStart, a.inclination, a.raan, t + dt);
+          const p2n = getSatellitePosition(b.plane, b.index, b.meanAnomalyStart, b.inclination, b.raan, t + dt);
+
+          const r = Cesium.Cartesian3.subtract(p2, p1, new Cesium.Cartesian3());   // m
+          const v1 = Cesium.Cartesian3.subtract(p1n, p1, new Cesium.Cartesian3()); // m/s aprox (dt=1)
+          const v2 = Cesium.Cartesian3.subtract(p2n, p2, new Cesium.Cartesian3());
+          const v = Cesium.Cartesian3.subtract(v2, v1, new Cesium.Cartesian3());   // relativa
+
+          const rKm = Cesium.Cartesian3.magnitude(r) / 1000;
+          const vRel = Cesium.Cartesian3.magnitude(v); // m/s
+          const closing = Cesium.Cartesian3.dot(r, v) < 0;
+
+          // TCA (aprox. lineal): t* = - (r·v)/|v|^2
+          const v2norm = vRel * vRel;
+          let tca = (v2norm > 0) ? - Cesium.Cartesian3.dot(r, v) / v2norm : 0;
+          tca = Math.max(0, Math.min(900, tca)); // limitamos a 15 min
+
+          // Distancia en TCA
+          const rAtTca = new Cesium.Cartesian3(
+            r.x + v.x * tca,
+            r.y + v.y * tca,
+            r.z + v.z * tca
+          );
+          const dcaKm = Cesium.Cartesian3.magnitude(rAtTca) / 1000;
+
+          // Heurística de probabilidad (0..1) más estable:
+          // - d_rel>0 si DCA < safeKm; escala 0..1
+          // - t_factor mayor cuando TCA es corto
+          // - closing factor si se están acercando
+          const d_rel = clamp01((safeKm - dcaKm) / safeKm);
+          const t_factor = 1 / (1 + tca / 300);     // 0..1, privilegia TCA corto
+          const closing_factor = closing ? 1.0 : 0.6;
+          let prob = clamp01(0.15 + 0.7 * d_rel) * t_factor * closing_factor;
+
+          if (dcaKm < safeKm || rKm < safeKm * 1.1) {
+            const percent = Math.max(0.1, prob * 100); // evita 0.0% visual
             collisionWarnings.push({
               sat1: `SAT-${a.id}`,
               sat2: `SAT-${b.id}`,
-              distance: dKm.toFixed(2),
-              riskLevel: dKm < safeKm / 2 ? 'CRITICAL' : 'HIGH'
+              distanceNowKm: rKm.toFixed(0),
+              vRelKms: (vRel / 1000).toFixed(2),
+              tcaSec: tca.toFixed(0),
+              dcaKm: dcaKm.toFixed(1),
+              probability: percent.toFixed(1) + '%',
+              riskLevel: (dcaKm < safeKm/2) ? 'CRITICAL' : (dcaKm < safeKm ? 'HIGH' : 'MEDIUM')
             });
           }
         }
@@ -593,21 +636,28 @@
       const statusDiv = document.getElementById('collisionStatus');
       const listDiv = document.getElementById('collisionsList');
       if (collisionWarnings.length === 0) {
-        statusDiv.innerHTML = `<div class="collision-safe"><strong>✓ Status: SAFE</strong><br>No collision risks detected</div>`;
+        statusDiv.innerHTML = `<div class="collision-safe"><strong>✓ Status: SAFE</strong><br>No collision risks detected with current threshold</div>`;
         listDiv.innerHTML = '<p style="text-align:center; color:#94a3b8;">No active collision alerts</p>';
       } else {
-        statusDiv.innerHTML = `<div class="collision-warning"><strong>⚠️ COLLISION WARNING</strong><br>${collisionWarnings.length} potential risk(s) detected</div>`;
+        const crit = collisionWarnings.filter(w => w.riskLevel === 'CRITICAL').length;
+        statusDiv.innerHTML = `<div class="collision-warning"><strong>⚠️ COLLISION WARNING</strong><br>${collisionWarnings.length} potential risk(s); Critical: ${crit}</div>`;
         listDiv.innerHTML = '';
-        collisionWarnings.forEach(w => {
-          const div = document.createElement('div');
-          div.className = 'contact-window';
-          div.style.borderLeftColor = w.riskLevel === 'CRITICAL' ? '#ef4444' : '#f59e0b';
-          div.innerHTML = `
-            <div class="contact-info"><span class="contact-label"><strong>${w.sat1} - ${w.sat2}</strong></span><span class="contact-value" style="color:${w.riskLevel==='CRITICAL'?'#ef4444':'#f59e0b'}">${w.riskLevel}</span></div>
-            <div class="contact-info"><span class="contact-label">Distance:</span><span class="contact-value">${w.distance} km</span></div>
-          `;
-          listDiv.appendChild(div);
-        });
+        collisionWarnings
+          .sort((a,b)=> (a.riskLevel===b.riskLevel)?(a.dcaKm-b.dcaKm):(a.riskLevel==='CRITICAL'?-1:1))
+          .forEach(w => {
+            const div = document.createElement('div');
+            div.className = 'contact-window';
+            div.style.borderLeftColor = (w.riskLevel === 'CRITICAL') ? '#ef4444' : (w.riskLevel === 'HIGH' ? '#f59e0b' : '#fbbf24');
+            div.innerHTML = `
+              <div class="contact-info"><span class="contact-label"><strong>${w.sat1} - ${w.sat2}</strong></span><span class="contact-value" style="color:${w.riskLevel==='CRITICAL'?'#ef4444':(w.riskLevel==='HIGH'?'#f59e0b':'#fbbf24')}">${w.riskLevel}</span></div>
+              <div class="contact-info"><span class="contact-label">Probability:</span><span class="contact-value">${w.probability}</span></div>
+              <div class="contact-info"><span class="contact-label">Rel. speed:</span><span class="contact-value">${w.vRelKms} km/s</span></div>
+              <div class="contact-info"><span class="contact-label">TCA:</span><span class="contact-value">${w.tcaSec} s</span></div>
+              <div class="contact-info"><span class="contact-label">DCA:</span><span class="contact-value">${w.dcaKm} km</span></div>
+              <div class="contact-info"><span class="contact-label">Now:</span><span class="contact-value">${w.distanceNowKm} km</span></div>
+            `;
+            listDiv.appendChild(div);
+          });
       }
     }
 
@@ -626,7 +676,7 @@
         unvisited.add(i);
       }
 
-      // Inicializa contactos desde src
+      // inicial desde src
       contacts.forEach((c, idx) => {
         if (c.from === srcId && c.t_start <= t0 && c.t_end > t0) {
           const eta = t0 + c.owlt + c.setup_s;
@@ -650,11 +700,7 @@
         unvisited.delete(current_idx);
 
         const current = contacts[current_idx];
-        if (current.to === dstId) {
-          best_end = current_idx;
-          best_eta = arrivalTimes[current_idx];
-          break;
-        }
+        if (current.to === dstId) { best_end = current_idx; best_eta = arrivalTimes[current_idx]; break; }
 
         contacts.forEach((n, nj) => {
           if (!unvisited.has(nj)) return;
@@ -663,7 +709,6 @@
           if (n.t_end <= arrivalTimes[current_idx]) return;
           const eta_n = arrivalTimes[current_idx] + n.owlt + n.setup_s;
           if (eta_n > n.t_end) return;
-
           const new_dist = eta_n - t0;
           if (new_dist < distances[nj]) {
             distances[nj] = new_dist;
@@ -702,7 +747,7 @@
         unvisited.add(i);
       }
 
-      // Selección inicial con calidad
+      // seed con calidad
       contacts.forEach((c, idx) => {
         if (c.from !== srcId) return;
         if (c.t_start > t0 || c.t_end <= t0) return;
@@ -733,11 +778,7 @@
         unvisited.delete(current_idx);
 
         const current = contacts[current_idx];
-        if (current.to === dstId) {
-          best_end = current_idx;
-          best_eta = arrivalTimes[current_idx];
-          break;
-        }
+        if (current.to === dstId) { best_end = current_idx; best_eta = arrivalTimes[current_idx]; break; }
 
         contacts.forEach((n, nj) => {
           if (!unvisited.has(nj)) return;
@@ -748,7 +789,8 @@
           let effective_setup = n.setup_s;
           const qDiff = Math.abs((current.quality || 1) - (n.quality || 1));
           effective_setup += qDiff * 0.2;
-          if (config.altitude < 600_000 && n.type === 'optical') effective_setup *= 0.8;
+          // ligera preferencia por óptico en LEO
+          if (n.type === 'optical') effective_setup *= 0.85;
 
           const eta_n = arrivalTimes[current_idx] + n.owlt + effective_setup;
           if (eta_n > n.t_end) return;
@@ -777,25 +819,20 @@
     }
 
     function cgrEnhancedSearch(srcId, dstId, t0, bundle_bytes) {
-      // 1) Enhanced
       let result = cgrEnhancedInternal(srcId, dstId, t0, bundle_bytes);
 
-      // 2) Ampliar horizonte si falla
       if (!result.found) {
         const oldH = config.planningHorizon;
         config.planningHorizon = Math.max(oldH, 60 * 60);
         buildContactGraph();
         result = cgrEnhancedInternal(srcId, dstId, t0, bundle_bytes);
         config.planningHorizon = oldH;
-        buildContactGraph(); // restablece grafo al horizonte original
+        buildContactGraph();
       }
 
-      // 3) Fallback a Classic
-      if (!result.found) {
-        result = cgrClassicSearch(srcId, dstId, t0, bundle_bytes);
-      }
+      if (!result.found) result = cgrClassicSearch(srcId, dstId, t0, bundle_bytes);
 
-      // 4) Último recurso: fuerza enlace directo más corto en el intervalo (garantiza ruta)
+      // último recurso: enlace directo si hay ventana válida
       if (!result.found) {
         const t1 = t0 + config.planningHorizon;
         let best = null;
@@ -805,15 +842,12 @@
             const eta = start + c.owlt + c.setup_s;
             if (eta <= c.t_end) {
               const lat = eta - t0;
-              if (!best || lat < best.latency) {
-                best = { found: true, eta, latency: lat, hops: 1, contact_ids: [c.id], nodes: [srcId, dstId] };
-              }
+              if (!best || lat < best.latency) best = { found: true, eta, latency: lat, hops: 1, contact_ids: [c.id], nodes: [srcId, dstId] };
             }
           }
         });
         if (best) result = best;
       }
-
       return result;
     }
 
@@ -826,7 +860,6 @@
       if (!base.found) return routes;
       routes.push(base);
 
-      // Alternativas removiendo aristas del mejor
       for (let i = 1; i < k; i++) {
         const ref = routes[0];
         let added = false;
@@ -865,7 +898,6 @@
       clearRoute();
       if (!route || !route.found) return;
 
-      // Dibuja las aristas de la ruta (líneas más gruesas/bright)
       const idToContact = {};
       contactGraph.forEach(c => idToContact[c.id] = c);
 
@@ -885,15 +917,13 @@
             }, false),
             width: 3.0,
             material: new Cesium.PolylineGlowMaterialProperty({
-              glowPower: 0.25,
-              color: Cesium.Color.fromCssColorString('#ffffff')
+              glowPower: 0.25, color: Cesium.Color.fromCssColorString('#ffffff')
             })
           }
         });
         routeEntities.push(ent);
       });
 
-      // Actualiza métricas de ruta
       document.getElementById('routeLatency').textContent = `${route.latency.toFixed(2)} s`;
       document.getElementById('routeHops').textContent = `${route.hops}`;
     }
@@ -914,6 +944,8 @@
       const nowSec = simSeconds();
       const active = contactGraph.filter(c => nowSec >= c.t_start && nowSec < c.t_end).length;
       document.getElementById('activeContacts').textContent = active;
+      const simEl = document.getElementById('simTimeMetric');
+      if (simEl) simEl.textContent = `${nowSec.toFixed(1)} s`;
     }
 
     function replanRoute() {
@@ -924,28 +956,26 @@
 
       let mode = document.getElementById('routingAlgorithm').value;
       if (mode === 'auto') {
-        // Heurística simple: si hay muchas aristas activas, enhanced; si no, classic
         const actives = contactGraph.filter(c => t0 >= c.t_start && t0 < c.t_end).length;
         mode = (actives > Math.max(10, satellites.length / 2)) ? 'cgr-enhanced' : 'cgr-classic';
       }
       config.routingAlgorithm = mode;
-      document.getElementById('activeAlgo').textContent = (mode === 'cgr-enhanced') ? 'CGR Enhanced' : (mode === 'cgr-classic') ? 'CGR Classic' : 'Auto';
+      document.getElementById('activeAlgo').textContent =
+        (mode === 'cgr-enhanced') ? 'CGR Enhanced' :
+        (mode === 'cgr-classic') ? 'CGR Classic' : 'Auto';
 
       const bundleBytes = config.bundleSize;
       const result = (mode === 'cgr-enhanced') ? cgrEnhancedSearch(sourceNode.id, destNode.id, t0, bundleBytes)
                                                : cgrClassicSearch(sourceNode.id, destNode.id, t0, bundleBytes);
 
-      // Si no encontró, fuerza enhanced con fallback total
       const finalResult = result.found ? result : cgrEnhancedSearch(sourceNode.id, destNode.id, t0, bundleBytes);
 
       const tEnd = performance.now();
       document.getElementById('calcTime').textContent = `${(tEnd - tStart).toFixed(1)} ms`;
-      document.getElementById('lastRecalc').textContent = `${t0.toFixed(1)} s`;
 
       currentRoute = finalResult.found ? finalResult : null;
       visualizeRoute(currentRoute);
 
-      // Alternativas
       const k = config.kRoutes;
       const routes = kYenRoutes(sourceNode.id, destNode.id, t0, bundleBytes, k);
       if (routes.length === 0 && currentRoute) routes.push(currentRoute);
@@ -955,7 +985,6 @@
     // =============== BUTTONS ===============
     function changeSenderReceiver() {
       if (satellites.length < 2) return;
-      // Aleatorio distinto
       const a = satellites[Math.floor(Math.random() * satellites.length)];
       let b = satellites[Math.floor(Math.random() * satellites.length)];
       if (a.id === b.id) b = satellites[(satellites.indexOf(a) + 1) % satellites.length];
@@ -964,15 +993,10 @@
       replanRoute();
     }
 
-    function toggleAnimation() {
-      viewer.clock.shouldAnimate = !viewer.clock.shouldAnimate;
-    }
+    function toggleAnimation() { viewer.clock.shouldAnimate = !viewer.clock.shouldAnimate; }
+    function resetView() { viewer.camera.flyHome(1.2); }
 
-    function resetView() {
-      viewer.camera.flyHome(1.2);
-    }
-
-    // =============== LISTENERS (SLIDERS/INPUTS) ===============
+    // =============== LISTENERS ===============
     document.getElementById('satCount').addEventListener('input', (e) => {
       const v = parseInt(e.target.value, 10);
       e.target.style.setProperty('--value', `${(v - 9) / (36 - 9) * 100}%`);
@@ -981,8 +1005,7 @@
     });
     document.getElementById('satCount').addEventListener('change', () => {
       initConstellation(config.satCount, config.altitude);
-      buildContactGraph();
-      replanRoute();
+      buildContactGraph(); replanRoute();
     });
 
     document.getElementById('altitude').addEventListener('input', (e) => {
@@ -993,8 +1016,7 @@
     });
     document.getElementById('altitude').addEventListener('change', () => {
       initConstellation(config.satCount, config.altitude);
-      buildContactGraph();
-      replanRoute();
+      buildContactGraph(); replanRoute();
     });
 
     document.getElementById('simSpeed').addEventListener('input', (e) => {
@@ -1015,8 +1037,7 @@
     document.getElementById('planningHorizon').addEventListener('change', (e) => {
       const v = parseInt(e.target.value, 10);
       config.planningHorizon = Math.max(5, Math.min(180, v)) * 60;
-      buildContactGraph();
-      replanRoute();
+      buildContactGraph(); replanRoute();
     });
 
     document.getElementById('bundleSize').addEventListener('change', (e) => {
@@ -1038,7 +1059,7 @@
     });
 
     document.getElementById('safeDistance').addEventListener('change', (e) => {
-      const km = Math.max(1, Math.min(50, parseInt(e.target.value, 10)));
+      const km = Math.max(1, Math.min(5000, parseInt(e.target.value, 10)));
       config.safeDistance = km * 1000;
     });
 
@@ -1048,21 +1069,15 @@
 
     viewer.clock.onTick.addEventListener(() => {
       const t = simSeconds();
-      // Sim time display
-      const el = document.getElementById('simTimeDisplay');
-      if (el) el.textContent = t.toFixed(1);
 
-      // métricas ~2/seg
-      if (t - lastMetricsSec > 0.5) {
+      if (t - lastMetricsSec > 0.25) {
         updateMetrics();
         updateContactWindowsList();
         lastMetricsSec = t;
       }
 
-      // colisiones ~1/seg
       detectCollisions();
 
-      // replan periódico
       if (t - lastRecalcSec >= config.recalcFreq) {
         buildContactGraph();
         replanRoute();
@@ -1080,13 +1095,12 @@
     }
     boot();
 
-    // Expose for buttons
+    // Expose
     window.changeSenderReceiver = changeSenderReceiver;
     window.toggleAnimation = toggleAnimation;
     window.resetView = resetView;
     window.switchTab = switchTab;
     window.toggleBottomPanel = toggleBottomPanel;
-
   </script>
 </body>
 </html>
