@@ -1,278 +1,189 @@
+# EcoStation CGR — Contact‑Graph Routing for LEO‑LEO Meshes
 
-# EcoStation — CGR API (LEO)
+## 0) TL;DR
 
-## Visión general
+A minimal DTN router for LEO constellations using Contact Graph Routing (CGR):
 
-Este proyecto implementa **Contact Graph Routing (CGR)** para redes espaciales tipo **LEO–LEO / LEO–Tierra** usando **un único modo: API**. El binario `cgr_api` descarga un **plan de contactos** (ventanas de visibilidad, retardos, tasas y capacidad residual) desde un dataset SODA de **data.nasa.gov** y calcula la **ruta de mínima ETA** (Earliest Time of Arrival) para un bundle entre un **nodo origen** y un **nodo destino**.
-
-Además, incorpora un **aprendizaje ligero opcional** (muy barato en CPU/RAM) que ajusta el coste de los enlaces en función de la espera observada y/o del consumo de capacidad, mejorando la estabilidad de las rutas frente a congestión o solapamiento de ventanas.
-
----
-
-## ¿Qué problema resuelve?
-
-En LEO, la topología cambia rápidamente: los enlaces entre satélites y estaciones existen sólo durante **ventanas** cortas y con **altas velocidades relativas**. En este contexto, CGR modela la red como un **grafo temporal de contactos** y selecciona una ruta **causal** (respetando disponibilidad temporal, *setup* y retardo OWLT) que minimiza la **ETA**.
+* **Store–carry–forward** model with precomputed **contact windows** between nodes.
+* Builds a **temporal contact graph** and finds the **minimum‑ETA** path.
+* **Improvement included:** optional **K alternative routes** by accounting for **residual capacity** after each found path.
+* **Input:** a `contacts.csv` describing link windows and resources.
 
 ---
 
-## Cómo funciona (lógica, sin código)
+## 1) Context & Rationale: DTN + CGR
 
-1. **Ingesta por API**
+**Why DTN?** Space networks (LEO, cislunar, interplanetary) suffer intermittent connectivity and variable latency. Conventional IP breaks when a link isn’t available. DTN (Delay/Disruption Tolerant Networking) stores bundles and forwards them when a window opens.
 
-   * Se selecciona un **proveedor** de datos mediante una **macro** de compilación. Por defecto: `NASA_PROVIDER_SODA` (Socrata SODA, CSV).
-   * El módulo de API descarga un CSV con campos: `id, from, to, t_start, t_end, owlt, rate_bps, setup_s, residual_bytes`.
+**What is CGR?** Contact Graph Routing is **schedule‑aware**: if we know in advance when links exist, we can compute routes that respect **time** and **capacity** constraints. Each contact (a link available within `[t_start, t_end]`) becomes a vertex in a temporal graph. An edge exists if one contact can follow another in time. The path cost is **ETA** (Earliest Time of Arrival).
 
-2. **Construcción del grafo de contactos**
-
-   * Cada fila es un **contacto dirigido** con ventana `[t_start, t_end)`.
-   * El coste efectivo por salto incluye **setup_s**, **retardo OWLT** y **tiempos de espera** si la transmisión debe aguantar hasta la apertura de la ventana.
-
-3. **Búsqueda de ruta (CGR)**
-
-   * Se ejecuta un **Dijkstra temporal** sobre el grafo de contactos: sólo se enlazan contactos compatibles en el tiempo y el destino.
-   * Se devuelve la **ruta óptima** (mínima ETA) y, opcionalmente, **K alternativas** (variación tipo Yen, sin consumo de capacidad).
-
-4. **Aprendizaje ligero (opcional)**
-
-   * **Consume**: tras utilizar una ruta, se **descuenta** `bundle_bytes` del `residual_bytes` de cada contacto usado (simula uso/carga).
-   * **EWMA**: se calcula una **penalización suave** por enlace con una media móvil exponencial sobre la **espera observada** en el primer salto; esta penalización se **inyecta** en el *setup* del enlace mediante un factor `lambda`.
-   * Efecto: el sistema evita “enamorarse” de un único enlace y estabiliza latencias cuando hay ventanas competidas.
+**Reality in LEO.** Windows are short, topology changes quickly, and both ISL (inter‑satellite links) and downlinks appear/disappear. CGR models this precisely because it reasons over a **contact plan**.
 
 ---
 
-## Flujo de ejecución
+## 2) What this project provides (at a glance)
 
-1. **Inicio**: parseo de flags CLI (dataset, token, src/dst, `t0`, bytes, `k`, ciclos).
-2. **Descarga**: el módulo API obtiene el CSV y lo parsea a memoria.
-3. **Ciclo de planificación** (1 o varios ciclos):
+* A working **MVP** capable of: (a) computing the best path (K=1) minimizing ETA; (b) producing **K plausible routes** by consuming capacity on used contacts.
+* **Inputs:** `contacts.csv` with `id, from, to, t_start, t_end, owlt_s, rate_bps, setup_s, residual_bytes`.
+* **Outputs:** a structured summary indicating whether a route was found and, if so, the path’s ETA, latency, hop count, and the sequence of contacts (or a list of K routes).
 
-   * Construye o actualiza el índice de vecinos por tiempo/nodo.
-   * Ejecuta CGR y devuelve **ETA, latencia y path**.
-   * (Opcional) Aplica **consume** y/o **EWMA** para el próximo ciclo.
-   * Avanza el reloj simulado `tick` segundos y repite hasta `cycles`.
+> Goal of the MVP: enable rapid experiments to **measure ETA, hops, and congestion effects** in LEO meshes without modeling full queueing or MAC details.
 
 ---
 
-## Diferencias y mejoras frente a CGR “puro”
+## 3) How it fits LEO system simulations
 
-* **CGR clásico**: óptimo respecto al plan de contactos **estático**; tiende a repetir rutas idénticas cuando hay un enlace “muy bueno”, ignorando congestión.
-* **Este proyecto** añade, sin apenas coste de recursos:
+* **Windows** come from a **contact plan** (derived from TLE/ephemerides and the planned ISLs/downlinks). The MVP reads it as CSV.
+* **Physical latency** is captured by **OWLT** (one‑way light time), which can be precomputed or approximated per contact.
+* **Capacity** is represented via `rate_bps` and `residual_bytes`.
+* **Downlinks & ISL** are both just contacts: SAT–GS or SAT–SAT.
+* **Expiry/TTL** can restrict routes that arrive too late.
 
-  * **Consumo de capacidad** *(opcional)* → rutas más diversas y realistas.
-  * **Penalización EWMA** *(opcional)* → reduce esperas recurrentes y estabiliza la latencia media.
-
-**Resultado**: con **sobrecoste mínimo (O(hops) + O(E) por ciclo)**, se obtiene un rendimiento **más robusto** en escenarios con ventanas competidas, manteniendo la simplicidad del CGR.
-
----
-
-## Macro del proveedor de API
-
-La selección del proveedor se hace en `include/nasa_api.h`:
-
-```c
-#define NASA_PROVIDER NASA_PROVIDER_SODA   // por defecto: SODA (data.nasa.gov)
-// #define NASA_PROVIDER NASA_PROVIDER_CUSTOM // plantilla para tu propia API
-```
-
-Si cambias a `NASA_PROVIDER_CUSTOM`, implementa los *stubs* en `src/nasa_api.c` para tu backend.
+This abstraction makes it easy to **plug** into broader simulations and to compare strategies fairly.
 
 ---
 
-## Uso rápido (CLI)
+## 4) Included improvements & why they matter
 
-```bash
-# Compilar
-make
+1. **Capacity‑aware pruning.** Discards contacts that cannot carry the bundle in the remaining window. This reflects real LEO contention.
+2. **K routes via capacity consumption.** After finding the best path, the used contacts’ residual capacity is **reduced**, revealing **alternative realistic routes** for the next iterations.
 
-# Una planificación (sin aprendizaje)
-./cgr_api \
-  --dataset abcd-1234 --app-token TU_TOKEN \
-  --src 100 --dst 200 --t0 0 --bytes 5e7 --k 3 --cycles 1
+**Why this approach?**
 
-# Varios ciclos con aprendizaje ligero
-./cgr_api \
-  --dataset abcd-1234 --app-token TU_TOKEN \
-  --src 100 --dst 200 --t0 0 --bytes 5e7 --k 3 \
-  --cycles 30 --tick 10 --consume --learn-ewma --alpha 0.2 --lambda 1.0
-```
-
-**Flags clave**
-
-* `--dataset`, `--app-token`: identifican el dataset SODA y token.
-* `--src`, `--dst`, `--t0`, `--bytes`: definen la consulta.
-* `--k`: número de rutas alternativas.
-* `--cycles`, `--tick`: iteraciones y avance del reloj (para aprendizaje).
-* `--consume`: resta capacidad a los contactos usados.
-* `--learn-ewma --alpha A --lambda L`: penalización suave por enlace.
+* Reproduces congestion effects **without** full queue models.
+* Incremental and simple to integrate into existing **simulation pipelines**.
 
 ---
 
-## Estructura mínima
+## 5) Current status vs. what we’re aiming for
 
-* `src/api_main.c` → punto de entrada (API + aprendizaje ligero).
-* `src/nasa_api.c` / `include/nasa_api.h` → proveedor SODA + macro de cambio.
-* `src/cgr.c`, `src/heap.c`, `src/csv.c`, `src/leo_metrics.c`, `include/cgr.h` → núcleo CGR y utilidades.
-* `Makefile` → build mínimo (sin tests), enlaza `-lcurl -lm`.
+**Current status**
 
----
+* CGR (K=1) using a temporal Dijkstra‑style expansion with checks for window, capacity, and optional expiry.
+* **K>1** via residual‑capacity consumption to obtain diversified alternatives.
+* CLI‑friendly I/O ready for demos and dashboards.
 
-## Límites conocidos
+**What we’re seeking next (roadmap)**
 
-* El aprendizaje es **ligero** (no simula colas ni *multi-commodity flow*).
-* La calidad depende de la **fidelidad del plan de contactos** publicado en el dataset.
-* Si el dataset no incluye `residual_bytes`, el consumo sólo afectará rutas subsecuentes dentro de la ejecución, no el dataset remoto.
-
----
-
-## Defensa durante el Hackathon
-
-* Mantiene la **corrección temporal** del CGR, imprescindible en LEO.
-* Añade **dos heurísticas** simples pero efectivas que reducen la **miopía** del modelo estático con un **coste despreciable**.
-* Es **modular**: cambiar de API es un `#define`; ampliar el aprendizaje o desactivarlo es cuestión de flags.
+* **True K‑shortest** (e.g., Yen) to complement the capacity‑consumption heuristic.
+* **Service classes / priorities** aligned with the Bundle Protocol.
+* **Partial‑window consumption** (fractional use of a contact’s duration).
+* **Edge/Node‑disjoint options** and fast reconvergence with ban lists.
+* **Backlog modeling** per node and per‑link remaining volume.
+* **Benchmarking harness** to compare against a “vanilla CGR” baseline on identical contact plans.
 
 ---
 
-## Créditos
+## 6) Glossary — What each thing is
 
-Desarrollado para EcoStation Europa — módulo de planificación y exploración de rutas CGR sobre datos públicos.
+* **Contact:** A time‑bounded opportunity to transmit between two nodes (`from → to`) with given setup time, rate, and residual capacity.
+* **Contact plan:** The full schedule of all contacts over the simulation horizon.
+* **OWLT (one‑way light time):** Propagation delay for the contact (distance / c).
+* **ETA (Earliest Time of Arrival):** Arrival time at the destination when following a given path.
+* **Residual capacity (`residual_bytes`):** Remaining bytes that can still be transmitted on a contact.
+* **Setup time (`setup_s`):** Per‑contact overhead before payload transmission can begin.
+* **K routes:** A set of alternative feasible paths produced either by true K‑shortest algorithms or by iteratively consuming capacity.
+* **TTL / Expiry:** Upper bound on how late a bundle may arrive.
 
 ---
 
-# CGR - Contact Graph Routing for Space Networks
+## 7) Data model (CSV)
 
-**Real-time satellite network routing simulator with DTN (Delay-Tolerant Networking) capabilities.**
+Minimal schema expected by the MVP:
 
-## 🚀 Quick Start
-
-```bash
-# Build and run real-time simulation
-make run
-
-# That's it! The simulator will:
-# - Generate a realistic 12-satellite network
-# - Compute optimal routes every 15 seconds
-# - Show alternative paths with K=5 diversity
-# - Display progress in real-time (Ctrl+C to stop)
+```text
+# id, from, to, t_start, t_end, owlt_s, rate_bps, setup_s, residual_bytes
 ```
 
-## 📁 Project Structure
+> Any generator producing this schema (from TLEs, planners, or synthetic scenarios) can be used to feed the router.
 
-```
-├── src/
-│   ├── cgr.c           # Core CGR algorithm (Dijkstra + Yen's K-shortest)
-│   ├── cgr_live.c      # Real-time simulation (main executable)
-│   ├── csv.c           # CSV parser for contact plans
-│   ├── heap.c          # Min-heap for Dijkstra
-│   ├── leo_metrics.c   # LEO satellite link metrics
-│   └── nasa_api.c      # NASA SODA API integration
-├── include/            # Header files
-├── data/               # Example contact plans (OPTIONAL - for testing only)
-└── Makefile
-```
+---
 
-## 🛰️ Is the `data/` folder necessary?
+## 8) Evaluation & success criteria
 
-**No**, the `data/` folder is **optional**. It contains example CSV files for testing:
+* **Baseline parity:** Match a standard CGR implementation on feasibility and minimum ETA for K=1 under identical contact plans.
+* **Added value for K>1:** Provide **diverse** alternatives that reflect capacity contention and path competition.
+* **Scalability:** Maintain acceptable performance on constellation‑scale contact plans.
+* **Traceability:** Each route should be explainable via its contacts and per‑hop timing.
 
-- **With API mode** (`--source api`): Fetches real-time data from NASA
-- **With synthetic mode** (`--source synth`): Generates realistic contact plans on-the-fly
-- **With local mode** (`--source local`): Uses CSV files from `data/`
+---
 
-**Recommendation**: Keep `data/contacts_realistic.csv` as a fallback for offline testing.
+## 9) Responsible use & scope
 
-## 🌐 NASA API Integration
+This MVP is intended for **simulation and research**. It doesn’t model security, regulatory constraints, or lower‑layer behavior (MAC/PHY). For mission‑critical systems, additional validation and safety mechanisms are required.
 
-### Current Configuration
+---
 
-The code uses **NASA's SODA API** structure expecting:
-```csv
-id,from,to,t_start,t_end,owlt,rate_bps,setup_s,residual_bytes
-```
+## 10) CGR — Full feature breakdown (what it includes)
 
-### How to Use with Real NASA Data
+**Core:**
 
-1. **Find a compatible dataset** at https://data.nasa.gov/dataset/
-   - Look for datasets with satellite contact/telemetry data
-   - Recommended: ISS tracking, satellite conjunction data
+* **Temporal contact graph:** nodes are contacts (time‑bounded links), edges connect time‑compatible contacts.
+* **ETA‑optimal path (K=1):** earliest‑arrival routing with OWLT + setup overhead.
+* **Capacity awareness:** checks residual bytes and effective throughput within each window; prunes infeasible contacts.
+* **TTL/expiry filtering:** discards paths arriving after the bundle deadline.
+* **Bidirectional handling:** treats ISL and downlink/uplink uniformly as directed contacts.
+* **Contact setup time:** modeled per hop before data transfer.
 
-2. **Adapt the data schema** (if needed):
-   - Modify `nasa_api.c` to transform NASA data to the expected format
-   - Or use the **synthetic generator** (recommended for demos)
+**Enhanced options (our add‑ons):**
 
-3. **Run with API**:
-```bash
-./cgr_live <dataset-id> --source api --app-token YOUR_TOKEN
-```
+* **K alternatives via residual‑capacity consumption:** after a found route, we reduce capacity on used contacts to surface realistic alternates.
+* **(Planned) K‑shortest algorithms:** e.g., Yen/Eppstein for diversity with formal guarantees.
+* **(Planned) Disjointness policies:** node‑disjoint / edge‑disjoint variants to improve robustness.
+* **(Planned) Service classes:** priorities and pre‑emption consistent with DTN/Bundle Protocol profiles.
+* **(Planned) Partial‑window usage:** proportional consumption of time/capacity when splitting across windows.
 
-### Why Synthetic Mode is Better for Demos
+**Outputs and KPIs:**
 
-The synthetic generator (`--source synth`) creates realistic satellite networks with:
-- ✅ Realistic orbital periods (~90 min)
-- ✅ Inter-Satellite Links (ISLs)
-- ✅ Ground station contact windows
-- ✅ Variable data rates and capacities
-- ✅ Randomized topology (configurable seed)
+* Per route: **ETA**, **total latency**, **hop count**, **contacts used**, **bottleneck rate**, **consumed capacity**.
+* For K>1: diversity metrics (path overlap %), incremental ETA, and feasibility notes.
 
-## 🎮 Usage Examples
+---
 
-### Default Real-Time Demo
-```bash
-make run
-# Uses: 12 satellites, 15s time step, 50MB bundles, K=5 routes
-```
+## 11) Collision/Conflict analysis — what we compute and what we show
 
-### Custom Parameters
-```bash
-./cgr_live --source synth --synth-n 20 --tick 10 --k 3 --bytes 100e6
-# 20 satellites, 10s steps, 3 alternative routes, 100MB bundles
-```
+**Goal:** ensure the planned transmissions don’t collide or over‑commit shared resources.
 
-### With NASA API (when available)
-```bash
-./cgr_live abcd-1234 --source api --app-token YOUR_TOKEN --tick 20 --k 5
-```
+**Computed checks:**
 
-### Local CSV Testing
-```bash
-./cgr_live --source local --contacts data/contacts_realistic.csv
-```
+* **Contact overlap conflicts:** two flows attempting to use the **same contact window** beyond residual capacity.
+* **Node‑radio contention:** concurrent contacts exceeding a node’s **transceiver concurrency** (e.g., 1 link at a time).
+* **Setup‑time clashes:** overlapping setup periods that delay or invalidate a hop.
+* **TCA proximity flags (optional):** mark contacts occurring near **closest‑approach** events where pointing or safety constraints might throttled links.
+* **Downlink ground‑station contention:** simultaneous downlinks competing for the same GS antenna.
 
-## 📊 Output Explanation
+**What the analysis shows:**
 
-```
-╔════════════════════════════════════════════════════════╗
-║  CYCLE #1    | Simulation time: 0.0 s                  
-╠════════════════════════════════════════════════════════╣
-║  Active contacts:   8                                  
-║  Data source:       SYNTHETIC                          
-║  Errors:            0                                  
-╚════════════════════════════════════════════════════════╝
+* A **conflict table** listing: window IDs, nodes involved, time span, type (capacity, radio, GS), and severity.
+* **Timeline view** (Gantt‑like): windows as bars; conflicts highlighted; selected route overlaid.
+* **Per‑node heatmap**: utilization vs. time to spot hot spots.
+* **Capacity ledger**: before/after residual bytes for each contact used by the route.
 
-🛰️  OPTIMAL ROUTE FOUND:
-   • ETA:      92.456 s       ← Earliest arrival time
-   • Latency:  92.456 s       ← Total delivery time
-   • Hops:     5              ← Number of satellite links
-   • Path:     0 → 3 → 7 → 11 → 14
+**Why it matters:** it validates that a route is not only time‑feasible but also **resource‑feasible**, and it explains failures (e.g., "no route due to GS contention at 12:41–12:43").
 
-📊 Alternative routes (K=5):
-   #1: ETA=92.456 s, 5 hops (+0.0% overhead)    ← Best route
-   #2: ETA=95.123 s, 6 hops (+2.9% overhead)    ← Backup
-   #3: ETA=98.772 s, 5 hops (+6.8% overhead)    ← Alternative
-   ...
-```
+---
 
-## 🔧 Build Options
+## 12) The `.html` report — purpose and contents
 
-```bash
-make          # Standard build
-make debug    # Debug build with sanitizers
-make clean    # Remove objects
-make fclean   # Remove everything
-make re       # Rebuild from scratch
-```
+**Objective:** offer a **single, shareable dashboard** to inspect a scenario, compare the **baseline CGR** with our **improved approach**, and understand **why** a path was (or wasn’t) found.
 
-## 🧪 Advanced Features
+**The HTML shows:**
 
-### K-Shortest Paths
-- **Yen-lite algorithm**: Finds diverse alternative routes without consuming
+* **Scenario overview:** nodes, time horizon, number of contacts, policy toggles (TTL, K, disjointness, radio concurrency).
+* **Contact plan explorer:** searchable table + timeline to filter by node, link type (ISL/downlink), and time.
+* **Route visualizer:**
+
+  * **Timeline overlay** of the chosen path with per‑hop OWLT, setup, and transfer intervals.
+  * **Map panel** (if enabled) to display ground tracks / GS locations and hop sequence.
+* **K‑routes comparator:** side‑by‑side cards with ETA, hops, bottleneck, overlap %, and a sparkline timeline.
+* **Conflict audit:** tables/plots described above to reveal capacity/radio/GS contention and residual‑capacity changes.
+* **Export buttons:** download JSON/CSV of selected routes and the conflict log for reproducible tests.
+
+**Intended use:**
+
+* Quickly **defend design choices** ("our variant reduces ETA by X% under contention") during reviews.
+* **Debug** failed routes by inspecting constraint violations.
+* **Benchmark** improvements on identical contact plans.
+
+> If you want, I can wire the current CLI outputs to this HTML template so it renders automatically after each run (no code walkthrough needed in the README; just a `make report`).
 
