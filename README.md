@@ -7,9 +7,7 @@
 > * The **collision prediction service that is not embedded in `index.html`** relies on an **external API** to operate.
 > * The **CGR component** runs on a **realistic simulated scenario**. Inside its folder you can start it by running: `make run`.
 >
-> **Quick demo / visualization:** open `index.html` (at the repo root) directly in your browser. You can also publish the repo with **GitHub Pages** and access it via URL.
->
-> **Program viewer from Github:** [Our interface](https://ravazque.github.io/NASA-Space-APPs-Challenge/)
+> **Quick demo / visualization:** open `index.html` (at the repo root) directly in your browser.
 
 ---
 
@@ -171,4 +169,4 @@ Educational prototype based on **DTN/CGR** ideas applied to LEO. Usage is **expe
 ### Links
 
 * **Repository:** [https://github.com/ravazque/NASA-Space-APPs-Challenge](https://github.com/ravazque/NASA-Space-APPs-Challenge)
-* **Visualization:** open `index.html` (repo root) or publish with GitHub Pages to access via URL.
+* **Visualization:** open `index.html` (at the repo root) directly in your browser.
