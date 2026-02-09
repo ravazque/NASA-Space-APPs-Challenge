@@ -2,7 +2,7 @@
 
 ---
 
-> ⚠️ **Important notice**
+> [!WARNING]
 >
 > * The **collision prediction service that is not embedded in `index.html`** relies on an **external API** to operate.
 > * The **CGR component** runs on a **realistic simulated scenario**. Inside its folder you can start it by running: `make run`.
@@ -11,7 +11,7 @@
 
 ---
 
-> ⚙️ **NOTE**
+> [!NOTE]
 > 
 > In some cases, when the number of satellites is reduced, the interface (in beta phase) may lose the route even if the simulation only has one. The transmitter and receiver must be reassigned so that the interface can reconnect all the information.
 
